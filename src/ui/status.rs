@@ -5,6 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
+use rust_i18n::t;
 
 use super::text::display_width_u16;
 use super::widgets::panel_contrast_fg;
@@ -179,7 +180,7 @@ pub(super) fn render_config_diagnostic(frame: &mut Frame, area: Rect, message: &
         .take(area.height as usize)
         .enumerate()
     {
-        let text = format!(" config warning: {line} ");
+        let text = t!("statusbar.config_warning", message = line).to_string();
         let width = (text.len() as u16).min(area.width);
         let notif_area = Rect::new(
             area.x + area.width.saturating_sub(width),
@@ -218,13 +219,13 @@ pub(super) fn agent_icon(
     }
 }
 
-pub(super) fn state_label(state: AgentState, seen: bool) -> &'static str {
+pub(super) fn state_label(state: AgentState, seen: bool) -> std::borrow::Cow<'static, str> {
     match (state, seen) {
-        (AgentState::Blocked, _) => "blocked",
-        (AgentState::Working, _) => "working",
-        (AgentState::Idle, false) => "done",
-        (AgentState::Idle, true) => "idle",
-        (AgentState::Unknown, _) => "idle",
+        (AgentState::Blocked, _) => t!("status.blocked"),
+        (AgentState::Working, _) => t!("status.working"),
+        (AgentState::Idle, false) => t!("status.done"),
+        (AgentState::Idle, true) => t!("status.idle"),
+        (AgentState::Unknown, _) => t!("status.idle"),
     }
 }
 

@@ -811,6 +811,8 @@ pub struct UiConfig {
     /// Accent color for highlights, borders, and navigation UI.
     /// Accepts hex (#89b4fa), named colors (cyan, blue), or RGB (rgb(137,180,250)).
     pub accent: String,
+    /// UI language: "en" (default) or "zh".
+    pub language: String,
     /// Optional visual toast notifications for background workspace events.
     pub toast: ToastConfig,
     /// Play sounds when agents change state in background workspaces.
@@ -1001,6 +1003,7 @@ impl Default for UiConfig {
             hide_tab_bar_when_single_tab: false,
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             accent: "cyan".into(),
+            language: "en".into(),
             toast: ToastConfig::default(),
             sound: SoundConfig::default(),
         }
