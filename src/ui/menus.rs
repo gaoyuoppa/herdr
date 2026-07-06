@@ -5,6 +5,7 @@ use ratatui::{
     widgets::{Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
+use rust_i18n::t;
 
 use super::widgets::{panel_contrast_fg, render_panel_shell};
 use crate::app::AppState;
@@ -12,11 +13,11 @@ use crate::app::AppState;
 fn prefix_rhs_label(bindings: &crate::config::ActionKeybinds) -> String {
     bindings
         .prefix_rhs_label()
-        .unwrap_or_else(|| "unset".to_string())
+        .unwrap_or_else(|| t!("common.unset").to_string())
 }
 
 fn keybind_label(bindings: &crate::config::ActionKeybinds) -> String {
-    bindings.label().unwrap_or_else(|| "unset".to_string())
+    bindings.label().unwrap_or_else(|| t!("common.unset").to_string())
 }
 
 fn render_bottom_bar(frame: &mut Frame, area: Rect, line: Line<'_>, bg: ratatui::style::Color) {
@@ -43,16 +44,16 @@ pub(super) fn render_prefix_overlay(app: &AppState, frame: &mut Frame, area: Rec
     let prefix = crate::config::format_key_combo((app.prefix_code, app.prefix_mods));
 
     let line = Line::from(vec![
-        Span::styled(" PREFIX ", mode_style),
+        Span::styled(t!("menu.prefix_label").to_string(), mode_style),
         Span::raw(" "),
         Span::styled("esc", key),
-        Span::styled(" cancel  ", dim),
+        Span::styled(t!("menu.cancel_hint").to_string(), dim),
         Span::styled(prefix, key),
-        Span::styled(" send prefix  ", dim),
+        Span::styled(t!("menu.send_prefix").to_string(), dim),
         Span::styled(workspace_picker, key),
-        Span::styled(" workspace nav  ", dim),
+        Span::styled(t!("menu.workspace_nav_hint").to_string(), dim),
         Span::styled(help, key),
-        Span::styled(" keybinds", dim),
+        Span::styled(t!("menu.keybinds_hint").to_string(), dim),
     ]);
 
     let overlay_y = area.y + area.height.saturating_sub(1);
@@ -79,18 +80,18 @@ pub(super) fn render_copy_mode_overlay(app: &AppState, frame: &mut Frame, area: 
             crate::app::state::CopyModeSearchDirection::Backward => "?",
         };
         Line::from(vec![
-            Span::styled(" COPY ", mode_style),
+            Span::styled(t!("menu.copy_label").to_string(), mode_style),
             Span::raw(" "),
             Span::styled(marker, key),
             Span::styled(prompt.query.clone(), Style::default().fg(app.palette.text)),
             Span::styled("█", key),
-            Span::styled("  enter search  esc cancel", dim),
+            Span::styled(t!("menu.enter_search_cancel").to_string(), dim),
         ])
     } else {
         let select = if copy_mode.selection.is_some() {
-            "selecting"
+            t!("menu.selecting").to_string()
         } else {
-            "select"
+            t!("menu.select").to_string()
         };
         let match_status = copy_mode
             .search
@@ -100,23 +101,26 @@ pub(super) fn render_copy_mode_overlay(app: &AppState, frame: &mut Frame, area: 
             .unwrap_or_default();
         let (exit_keys, exit_label) =
             if copy_mode.search.query.is_empty() && copy_mode.selection.is_none() {
-                ("q/esc", " exit")
+                ("q/esc", t!("menu.exit_hint").to_string())
             } else {
-                ("esc", " clear  q exit")
+                ("esc", t!("menu.clear_exit_hint").to_string())
             };
         Line::from(vec![
-            Span::styled(" COPY ", mode_style),
+            Span::styled(t!("menu.copy_label").to_string(), mode_style),
             Span::raw(" "),
             Span::styled("h/j/k/l w/b/e { }", key),
-            Span::styled(" move  ", dim),
+            Span::styled(t!("menu.move_hint").to_string(), dim),
             Span::styled("/ ?", key),
-            Span::styled(" search  ", dim),
+            Span::styled(t!("menu.search_hint").to_string(), dim),
             Span::styled("n/N", key),
-            Span::styled(format!(" repeat{match_status}  "), dim),
+            Span::styled(
+                format!(" {}{match_status}  ", t!("menu.repeat")),
+                dim,
+            ),
             Span::styled("v/space", key),
             Span::styled(format!(" {select}  "), dim),
             Span::styled("y/enter", key),
-            Span::styled(" copy  ", dim),
+            Span::styled(t!("menu.copy_hint").to_string(), dim),
             Span::styled(exit_keys, key),
             Span::styled(exit_label, dim),
         ])
@@ -155,34 +159,34 @@ pub(super) fn render_navigate_overlay(app: &AppState, frame: &mut Frame, area: R
         keybind_label(&kb.navigate.workspace_down)
     );
     let line = Line::from(vec![
-        Span::styled(" NAVIGATE ", mode_style),
+        Span::styled(t!("menu.navigate_label").to_string(), mode_style),
         Span::raw(" "),
         Span::styled("esc", key),
-        Span::styled(" back  ", dim),
+        Span::styled(t!("menu.back_hint").to_string(), dim),
         Span::styled(workspace_nav, key),
-        Span::styled(" ws  ", dim),
+        Span::styled(t!("menu.ws_hint").to_string(), dim),
         Span::styled("⇥", key),
-        Span::styled(" pane  ", dim),
+        Span::styled(t!("menu.pane_hint").to_string(), dim),
         Span::styled(goto, key),
-        Span::styled(" navigator  ", dim),
+        Span::styled(t!("menu.navigator_hint").to_string(), dim),
         Span::styled(new_tab, key),
-        Span::styled(" new tab  ", dim),
+        Span::styled(t!("menu.new_tab_hint").to_string(), dim),
         Span::styled(split_vertical, key),
-        Span::styled(" split│  ", dim),
+        Span::styled(t!("menu.split_v_hint").to_string(), dim),
         Span::styled(split_horizontal, key),
-        Span::styled(" split─  ", dim),
+        Span::styled(t!("menu.split_h_hint").to_string(), dim),
         Span::styled(close_pane, key),
-        Span::styled(" close  ", dim),
+        Span::styled(t!("menu.close_hint").to_string(), dim),
         Span::styled(zoom, key),
-        Span::styled(" zoom  ", dim),
+        Span::styled(t!("menu.zoom_hint").to_string(), dim),
         Span::styled(resize, key),
-        Span::styled(" resize  ", dim),
+        Span::styled(t!("menu.resize_hint").to_string(), dim),
         Span::styled(help, key),
-        Span::styled(" keybinds  ", dim),
+        Span::styled(t!("menu.keybinds_hint_nav").to_string(), dim),
         Span::styled(settings, key),
-        Span::styled(" settings  ", dim),
+        Span::styled(t!("menu.settings_hint").to_string(), dim),
         Span::styled(detach, key),
-        Span::styled(" detach", dim),
+        Span::styled(t!("menu.detach_hint").to_string(), dim),
     ]);
 
     let overlay_y = area.y + area.height.saturating_sub(1);
@@ -191,7 +195,7 @@ pub(super) fn render_navigate_overlay(app: &AppState, frame: &mut Frame, area: R
 
     if app.update_available.is_some() {
         let status = Line::from(vec![Span::styled(
-            " update ready",
+            t!("menu.update_ready").to_string(),
             Style::default()
                 .fg(app.palette.accent)
                 .add_modifier(Modifier::BOLD),
@@ -247,10 +251,13 @@ pub(super) fn render_global_launcher_menu(app: &AppState, frame: &mut Frame) {
         let line = if app.global_menu_item_has_badge(item) {
             Line::from(vec![
                 Span::styled(" ●", badge_style),
-                Span::styled(format!(" {item} "), item_style),
+                Span::styled(format!(" {} ", app.global_menu_display_label(item)), item_style),
             ])
         } else {
-            Line::from(Span::styled(format!(" {item} "), item_style))
+            Line::from(Span::styled(
+                format!(" {} ", app.global_menu_display_label(item)),
+                item_style,
+            ))
         };
         frame.render_widget(Paragraph::new(line).alignment(Alignment::Left), rect);
     }
@@ -268,14 +275,14 @@ pub(super) fn render_resize_overlay(app: &AppState, frame: &mut Frame, area: Rec
         .add_modifier(Modifier::BOLD);
 
     let line = Line::from(vec![
-        Span::styled(" RESIZE ", mode_style),
+        Span::styled(t!("menu.resize_label").to_string(), mode_style),
         Span::raw("  "),
         Span::styled("h/l", key),
-        Span::styled(" width  ", dim),
+        Span::styled(t!("menu.width_hint").to_string(), dim),
         Span::styled("j/k", key),
-        Span::styled(" height  ", dim),
+        Span::styled(t!("menu.height_hint").to_string(), dim),
         Span::styled("esc", key),
-        Span::styled(" done", dim),
+        Span::styled(t!("menu.done_hint").to_string(), dim),
     ]);
 
     let overlay_y = area.y + area.height.saturating_sub(1);
@@ -299,7 +306,7 @@ pub(super) fn render_context_menu(app: &AppState, frame: &mut Frame) {
     let items: Vec<ListItem> = menu
         .items()
         .iter()
-        .map(|item| ListItem::new(Line::from(*item)))
+        .map(|item| ListItem::new(Line::from(crate::app::state::ContextMenuState::display_label(item))))
         .collect();
     let list = List::new(items)
         .style(Style::default().fg(p.text))

@@ -66,7 +66,10 @@ mod detect;
 mod events;
 mod ghostty;
 mod handoff_runtime;
+mod i18n;
 mod input;
+
+rust_i18n::i18n!("locales", fallback = "en");
 mod integration;
 mod ipc;
 mod kitty_graphics;
@@ -354,6 +357,9 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Accent color for highlights, borders, and navigation UI.
 # Accepts: hex (#89b4fa), named colors (cyan, blue, magenta), or rgb(r,g,b)
 # accent = "cyan"
+
+# UI language: "en" for English (default) or "zh" for 简体中文.
+# language = "en"
 
 # Background notification popup delivery
 [ui.toast]
@@ -762,6 +768,7 @@ fn main() -> io::Result<()> {
 
     let loaded_config = config::Config::load();
     exit_if_nested_disabled(&loaded_config.config);
+    i18n::apply_locale(&loaded_config.config.ui.language);
 
     let no_session = args.iter().any(|a| a == "--no-session");
 

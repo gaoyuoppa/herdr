@@ -1457,6 +1457,7 @@ impl App {
                 }
                 self.state.sound = config.ui.sound.clone();
                 self.state.toast_config = config.ui.toast.clone();
+                crate::i18n::apply_locale(&config.ui.language);
             }
         }
 

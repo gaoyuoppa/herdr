@@ -7,6 +7,7 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
+use rust_i18n::t;
 
 use self::tokens::{ResolvedToken, ResolvedTokenKind, SpaceTokenContext};
 use super::scrollbar::{render_scrollbar, should_show_scrollbar};
@@ -78,10 +79,10 @@ pub(crate) fn sidebar_section_divider_rect(area: Rect, split_ratio: f32) -> Rect
     Rect::new(content.x, content.y + ws_h, content.width, 1)
 }
 
-fn agent_panel_sort_label(sort: AgentPanelSort) -> &'static str {
+fn agent_panel_sort_label(sort: AgentPanelSort) -> String {
     match sort {
-        AgentPanelSort::Spaces => "grouped",
-        AgentPanelSort::Priority => "priority",
+        AgentPanelSort::Spaces => t!("status.grouped").to_string(),
+        AgentPanelSort::Priority => t!("status.priority").to_string(),
     }
 }
 
@@ -1223,7 +1224,7 @@ fn render_workspace_list(
     if area.height > 0 {
         frame.render_widget(
             Paragraph::new(Line::from(vec![Span::styled(
-                " spaces",
+                t!("sidebar.spaces").to_string(),
                 Style::default().fg(p.overlay0).add_modifier(Modifier::BOLD),
             )])),
             Rect::new(area.x, area.y, area.width, 1),
@@ -1397,7 +1398,10 @@ fn render_workspace_list(
     if app.mouse_capture && list_bottom > area.y {
         let new_rect = app.sidebar_new_button_rect();
         frame.render_widget(
-            Paragraph::new(Span::styled(" new", Style::default().fg(p.overlay0))),
+            Paragraph::new(Span::styled(
+                t!("sidebar.new").to_string(),
+                Style::default().fg(p.overlay0),
+            )),
             new_rect,
         );
 
@@ -1408,10 +1412,13 @@ fn render_workspace_list(
                     "● ",
                     Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled("menu", Style::default().fg(p.overlay0)),
+                Span::styled(t!("common.menu").to_string(), Style::default().fg(p.overlay0)),
             ])
         } else {
-            Line::from(vec![Span::styled("menu", Style::default().fg(p.overlay0))])
+            Line::from(vec![Span::styled(
+                t!("common.menu").to_string(),
+                Style::default().fg(p.overlay0),
+            )])
         };
         frame.render_widget(
             Paragraph::new(menu_line).alignment(Alignment::Right),
@@ -1440,7 +1447,7 @@ fn render_agent_detail(
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![Span::styled(
-            " agents",
+            t!("sidebar.agents").to_string(),
             Style::default().fg(p.overlay0).add_modifier(Modifier::BOLD),
         )])),
         Rect::new(area.x, area.y + 1, area.width, 1),

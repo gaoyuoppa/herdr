@@ -19,6 +19,7 @@ use crate::config::StatusIndicatorStyle;
 use crate::detect::AgentState;
 use crate::layout::PaneId;
 use crate::terminal::TerminalRuntimeRegistry;
+use rust_i18n::t;
 
 const SWITCH_BUTTON_WIDTH: u16 = 10;
 
@@ -290,7 +291,7 @@ pub(crate) fn render_mobile_panel(
 
     let areas = mobile_switcher_areas(app);
     frame.render_widget(
-        Paragraph::new(" switch").style(
+        Paragraph::new(t!("mobile.switch").to_string()).style(
             Style::default()
                 .fg(p.text)
                 .bg(p.panel_bg)
@@ -322,7 +323,7 @@ fn render_header_status(
     }
     let p = &app.palette;
     let Some(ws) = app.active.and_then(|idx| app.workspaces.get(idx)) else {
-        frame.render_widget(Paragraph::new(" no workspace"), area);
+        frame.render_widget(Paragraph::new(t!("mobile.no_workspace").to_string()), area);
         return;
     };
 
@@ -373,9 +374,15 @@ fn mobile_tab_status(ws: &crate::workspace::Workspace) -> String {
         .tab_display_name(ws.active_tab)
         .unwrap_or_else(|| (ws.active_tab + 1).to_string());
     if ws.tabs.len() <= 1 {
-        format!("tab {tab_label}")
+        t!("mobile.tab_status", name = tab_label).to_string()
     } else {
-        format!("tab {tab_label} · {}/{}", ws.active_tab + 1, ws.tabs.len())
+        t!(
+            "mobile.tab_status_pos",
+            name = tab_label,
+            cur = ws.active_tab + 1,
+            total = ws.tabs.len()
+        )
+        .to_string()
     }
 }
 
@@ -392,7 +399,7 @@ fn render_switch_button(app: &AppState, frame: &mut Frame, area: Rect) {
     }
     let label_y = if area.height > 1 { area.y + 1 } else { area.y };
     frame.render_widget(
-        Paragraph::new("switch")
+        Paragraph::new(t!("mobile.switch_btn").to_string())
             .style(
                 Style::default()
                     .fg(p.text)
@@ -426,7 +433,7 @@ fn render_close_button(app: &AppState, frame: &mut Frame, area: Rect) {
             .set_style(Style::default().fg(p.surface_dim).bg(p.surface0));
     }
     frame.render_widget(
-        Paragraph::new("close")
+        Paragraph::new(t!("mobile.close_btn").to_string())
             .style(
                 Style::default()
                     .fg(p.overlay1)
@@ -502,8 +509,14 @@ fn render_mobile_switcher_content(
         let title = app
             .agent_view_override
             .as_ref()
-            .map(|view| format!("agents · {}", view.label.as_deref().unwrap_or("filtered")))
-            .unwrap_or_else(|| "agents".to_string());
+            .map(|view| {
+                let label = view
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| t!("mobile.filtered").to_string());
+                format!("{} · {label}", t!("mobile.agents"))
+            })
+            .unwrap_or_else(|| t!("mobile.agents").to_string());
         render_section_title_at(
             frame,
             viewport,
@@ -572,17 +585,18 @@ fn render_mobile_switcher_content(
         content,
         doc_y,
         app.mobile_switcher_scroll,
-        "spaces",
+        &t!("mobile.spaces").to_string(),
         p,
     );
     doc_y += 1;
+    let new_workspace_label = t!("mobile.new_workspace").to_string();
     render_action_row_at(
         frame,
         viewport,
         content,
         doc_y,
         app.mobile_switcher_scroll,
-        "+ new workspace",
+        &new_workspace_label,
         p,
     );
     doc_y += 1;
@@ -639,9 +653,13 @@ fn render_mobile_switcher_content(
                 .add_modifier(Modifier::BOLD),
         ));
 
+        let shell_label = ws
+            .branch()
+            .map(|b| b.to_string())
+            .unwrap_or_else(|| t!("nav.shell").to_string());
         let detail = format!(
             "{detail_prefix}{} · {}",
-            ws.branch().unwrap_or_else(|| "shell".into()),
+            shell_label,
             mobile_tab_status(ws)
         );
         render_two_line_item(
@@ -665,17 +683,18 @@ fn render_mobile_switcher_content(
             content,
             doc_y,
             app.mobile_switcher_scroll,
-            "tabs",
+            &t!("mobile.tabs").to_string(),
             p,
         );
         doc_y += 1;
+        let new_tab_label = t!("mobile.new_tab").to_string();
         render_action_row_at(
             frame,
             viewport,
             content,
             doc_y,
             app.mobile_switcher_scroll,
-            "+ new tab",
+            &new_tab_label,
             p,
         );
         doc_y += 1;
@@ -686,7 +705,7 @@ fn render_mobile_switcher_content(
                 .tab_display_name(idx)
                 .unwrap_or_else(|| (idx + 1).to_string());
             let label = if tab.is_auto_named() {
-                format!("tab {display_name}")
+                t!("mobile.tab_status", name = display_name).to_string()
             } else {
                 format!("{} · {display_name}", idx + 1)
             };
@@ -719,14 +738,14 @@ fn render_mobile_switcher_content(
         content,
         doc_y,
         app.mobile_switcher_scroll,
-        "menu",
+        &t!("common.menu").to_string(),
         p,
     );
     doc_y += 1;
     for label in app.global_menu_labels() {
         if let Some(y) = visible_y(viewport, app.mobile_switcher_scroll, doc_y) {
             frame.render_widget(
-                Paragraph::new(format!("  {label}"))
+                Paragraph::new(format!("  {}", app.global_menu_display_label(label)))
                     .style(Style::default().fg(p.overlay1).bg(p.panel_bg)),
                 Rect::new(content.x, y, content.width, 1),
             );
@@ -1017,10 +1036,10 @@ fn agent_summary_segments(
     indicator_style: StatusIndicatorStyle,
 ) -> Vec<(String, SummaryTone)> {
     if counts.total() == 0 {
-        return vec![("no agents".to_string(), SummaryTone::Muted)];
+        return vec![(t!("mobile.no_agents").to_string(), SummaryTone::Muted)];
     }
     if !counts.any_pending() {
-        return vec![("all idle".to_string(), SummaryTone::Muted)];
+        return vec![(t!("mobile.all_idle").to_string(), SummaryTone::Muted)];
     }
     let mut segments = Vec::new();
     if counts.blocked > 0 {
@@ -1031,7 +1050,7 @@ fn agent_summary_segments(
                 true,
                 Some("◉"),
                 counts.blocked,
-                "blocked",
+                &t!("common.blocked"),
             ),
             SummaryTone::Blocked,
         ));
@@ -1044,7 +1063,7 @@ fn agent_summary_segments(
                 false,
                 Some("●"),
                 counts.done,
-                "done",
+                &t!("common.done"),
             ),
             SummaryTone::Done,
         ));
@@ -1057,7 +1076,7 @@ fn agent_summary_segments(
                 true,
                 None,
                 counts.working,
-                "working",
+                &t!("common.working"),
             ),
             SummaryTone::Working,
         ));
@@ -1070,7 +1089,7 @@ fn agent_summary_segments(
                 true,
                 None,
                 counts.idle,
-                "idle",
+                &t!("common.idle"),
             ),
             SummaryTone::Idle,
         ));
@@ -1168,14 +1187,14 @@ fn mobile_toast_title(toast: &ToastNotification) -> String {
         ToastKind::NeedsAttention => toast
             .title
             .strip_suffix(" needs attention")
-            .map(|agent| format!("{agent} waiting"))
+            .map(|agent| t!("mobile.waiting", agent = agent).to_string())
             .unwrap_or_else(|| toast.title.clone()),
         ToastKind::Finished => toast
             .title
             .strip_suffix(" finished")
-            .map(|agent| format!("{agent} done"))
+            .map(|agent| t!("mobile.done", agent = agent).to_string())
             .unwrap_or_else(|| toast.title.clone()),
-        ToastKind::UpdateInstalled => "update ready".to_string(),
+        ToastKind::UpdateInstalled => t!("release.update_ready").to_string(),
     }
 }
 

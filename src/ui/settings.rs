@@ -5,6 +5,7 @@ use ratatui::{
     widgets::{List, ListItem, ListState, Paragraph, Tabs},
     Frame,
 };
+use rust_i18n::t;
 
 use super::widgets::{
     action_button_row_rects, centered_popup_rect, modal_stack_areas, panel_contrast_fg,
@@ -57,7 +58,7 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![Span::styled(
-            " settings",
+            t!("settings.title").to_string(),
             Style::default().fg(p.text).add_modifier(Modifier::BOLD),
         )])),
         header_rows[0],
@@ -70,10 +71,10 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
                     "● ",
                     Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(section.label()),
+                Span::raw(section.display_label()),
             ])
         } else {
-            Line::from(section.label())
+            Line::from(section.display_label())
         }
     });
     let tabs = Tabs::new(tab_labels)
@@ -127,8 +128,8 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
                 frame,
                 content_area,
                 p,
-                "sound alerts",
-                "play sounds when agents change state in background",
+                &t!("state.sound_alerts"),
+                &t!("state.sound_alerts_desc"),
                 app.sound_enabled(),
                 app.settings.list.selected,
             );
@@ -137,13 +138,13 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
             render_modal_choice_list(
                 frame,
                 content_area,
-                "notification popups",
-                "choose where background popup notifications should appear",
+                &t!("state.notification_popups"),
+                &t!("state.notification_popups_desc"),
                 &[
-                    ("off", ToastDelivery::Off),
-                    ("inside herdr", ToastDelivery::Herdr),
-                    ("via terminal", ToastDelivery::Terminal),
-                    ("via system", ToastDelivery::System),
+                    (&t!("common.off"), ToastDelivery::Off),
+                    (&t!("state.inside_herdr"), ToastDelivery::Herdr),
+                    (&t!("state.via_terminal"), ToastDelivery::Terminal),
+                    (&t!("state.via_system"), ToastDelivery::System),
                 ],
                 app.toast_delivery(),
                 app.settings.list.selected,
@@ -156,8 +157,8 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
                 frame,
                 content_area,
                 p,
-                "agent border labels",
-                "show detected agent names in split pane borders",
+                &t!("state.agent_border_labels"),
+                &t!("state.agent_border_labels_desc"),
                 app.agent_border_labels_enabled(),
                 app.settings.list.selected,
             );
@@ -179,7 +180,7 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
                 frame,
                 apply_rect,
                 Some("↵"),
-                primary_label,
+                &primary_label,
                 Style::default()
                     .fg(panel_contrast_fg(p))
                     .bg(p.accent)
@@ -190,7 +191,7 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
             frame,
             close_rect,
             Some("esc"),
-            "close",
+            &t!("common.close"),
             Style::default()
                 .fg(p.text)
                 .bg(p.surface0)
@@ -200,9 +201,9 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(" ↑↓", Style::default().fg(p.overlay0)),
-                Span::styled(" select  ", Style::default().fg(p.overlay1)),
+                Span::styled(t!("settings.select_hint").to_string(), Style::default().fg(p.overlay1)),
                 Span::styled("tab", Style::default().fg(p.overlay0)),
-                Span::styled(" section", Style::default().fg(p.overlay1)),
+                Span::styled(t!("settings.section_hint").to_string(), Style::default().fg(p.overlay1)),
             ])),
             footer_rows[0],
         );
@@ -211,10 +212,10 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
 
 pub(crate) fn settings_primary_button_label(
     section: crate::app::state::SettingsSection,
-) -> &'static str {
+) -> String {
     match section {
-        crate::app::state::SettingsSection::Integrations => "install",
-        _ => "apply",
+        crate::app::state::SettingsSection::Integrations => t!("common.install").to_string(),
+        _ => t!("common.apply").to_string(),
     }
 }
 
@@ -233,12 +234,13 @@ pub(crate) fn settings_button_rects(
     section: crate::app::state::SettingsSection,
     show_primary: bool,
 ) -> (Option<Rect>, Rect) {
+    let close_label = t!("common.close").to_string();
     if !show_primary {
         let rects = action_button_row_rects(
             inner,
             &[ActionButtonSpec {
                 hint: Some("esc"),
-                label: "close",
+                label: &close_label,
             }],
             2,
             inner.height.saturating_sub(1),
@@ -246,16 +248,17 @@ pub(crate) fn settings_button_rects(
         return (None, rects[0]);
     }
 
+    let primary_label = settings_primary_button_label(section);
     let rects = action_button_row_rects(
         inner,
         &[
             ActionButtonSpec {
                 hint: Some("↵"),
-                label: settings_primary_button_label(section),
+                label: &primary_label,
             },
             ActionButtonSpec {
                 hint: Some("esc"),
-                label: "close",
+                label: &close_label,
             },
         ],
         2,
@@ -283,11 +286,11 @@ fn integrations_footer_paragraph(app: &AppState) -> Paragraph<'static> {
             .iter()
             .any(crate::integration::IntegrationRecommendation::needs_install)
         {
-            " press install to add available or outdated integrations"
+            t!("settings.press_install_hint").to_string()
         } else if found_any {
-            " all detected integrations are installed"
+            t!("settings.all_installed_hint").to_string()
         } else {
-            " no supported agent CLIs found on PATH"
+            t!("settings.no_cli_found_hint").to_string()
         };
         footer_lines.push(Line::from(Span::styled(
             hint.to_string(),
@@ -318,16 +321,14 @@ fn render_settings_integrations(app: &AppState, frame: &mut Frame, area: Rect) {
     .areas::<6>(area);
 
     frame.render_widget(
-        Paragraph::new("agent integrations")
+        Paragraph::new(t!("settings.agent_integrations").to_string())
             .style(Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
         rows[0],
     );
     frame.render_widget(
-        Paragraph::new(
-            "let agents report state directly instead of relying only on process detection",
-        )
-        .style(Style::default().fg(p.overlay1))
-        .wrap(ratatui::widgets::Wrap { trim: false }),
+        Paragraph::new(t!("settings.integrations_desc").to_string())
+            .style(Style::default().fg(p.overlay1))
+            .wrap(ratatui::widgets::Wrap { trim: false }),
         rows[1],
     );
 
@@ -361,7 +362,7 @@ fn render_settings_integrations(app: &AppState, frame: &mut Frame, area: Rect) {
 
     if lines.is_empty() {
         lines.push(Line::from(Span::styled(
-            " no integration targets available",
+            t!("settings.no_integration_targets").to_string(),
             Style::default().fg(p.overlay1),
         )));
     }
