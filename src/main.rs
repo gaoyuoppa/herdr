@@ -450,6 +450,13 @@ fn main() -> io::Result<()> {
         std::process::exit(2);
     }
 
+    // CLI 子命令(update/status 等)分发前先应用语言设置,
+    // 确保这些命令的输出也走当前 locale(由 config.toml 的 ui.language 决定)。
+    {
+        let early_config = config::Config::load();
+        i18n::apply_locale(&early_config.config.ui.language);
+    }
+
     if let cli::CommandOutcome::Handled(code) = cli::maybe_run(&args)? {
         std::process::exit(code);
     }
