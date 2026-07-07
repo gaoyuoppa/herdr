@@ -27,6 +27,16 @@ enum ActorState {
     Released,
 }
 
+/// read_once 的读取结果三态,用于批量读取循环正确决定是否继续。
+enum ReadOutcome {
+    /// 成功读取了数据,缓冲区可能还有更多,可以继续读。
+    Read,
+    /// PTY 暂时无数据(WouldBlock),需等待下次 poll 唤醒。
+    Idle,
+    /// PTY 已关闭或读取出错,actor 应退出。
+    Closed,
+}
+
 pub(crate) struct PtyReadResult {
     pub terminal_responses: Vec<Bytes>,
 }
@@ -451,11 +461,30 @@ impl PtyIoActorRunner {
                     if readiness.pty_write_ready && !self.pending_writes.is_empty() {
                         self.flush_pending_writes_once();
                     }
-                    if self.state == ActorState::Running
-                        && readiness.pty_read_ready
-                        && !self.read_once()
-                    {
-                        break;
+                    if self.state == ActorState::Running && readiness.pty_read_ready {
+                        // 批量读取:连续读直到 PTY 缓冲区空(Idle/WouldBlock)或关闭。
+                        // 高速输出时,多次 on_read 触发的渲染请求会被 render_dirty
+                        // 原子标志去重,渲染线程只唤醒一次做合并渲染,显著降低卡顿。
+                        // 限制单轮最多读 64 次(最多 64*8KB=512KB),避免长时间独占 actor。
+                        let mut read_count = 0u32;
+                        loop {
+                            match self.read_once() {
+                                ReadOutcome::Closed => {
+                                    should_exit = true;
+                                    break;
+                                }
+                                ReadOutcome::Idle => break,
+                                ReadOutcome::Read => {
+                                    read_count += 1;
+                                    if read_count >= 64 {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if should_exit {
+                            break;
+                        }
                     }
                 }
                 Err(err) => {
@@ -624,20 +653,20 @@ impl PtyIoActorRunner {
         }
     }
 
-    fn read_once(&mut self) -> bool {
+    fn read_once(&mut self) -> ReadOutcome {
         let mut buf = [0u8; 8192];
         match self.file.read(&mut buf) {
-            Ok(0) => false,
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => true,
-            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => true,
+            Ok(0) => ReadOutcome::Closed,
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => ReadOutcome::Idle,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => ReadOutcome::Idle,
             Err(err) => {
                 debug!(pane = self.pane_id, err = %err, "PTY actor read failed");
-                false
+                ReadOutcome::Closed
             }
             Ok(n) => {
                 let result = (self.on_read)(&buf[..n]);
                 self.enqueue_terminal_responses(result.terminal_responses);
-                true
+                ReadOutcome::Read
             }
         }
     }
