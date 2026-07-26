@@ -1438,6 +1438,16 @@ impl App {
                     .clamp(self.state.sidebar_min_width, self.state.sidebar_max_width);
                 self.state.mouse_capture = config.ui.mouse_capture;
                 self.state.copy_on_select = config.ui.copy_on_select;
+                if self.state.copy_on_select.is_disabled() {
+                    if self.state.mode == Mode::Copy {
+                        self.state.stop_selection_autoscroll_state();
+                    } else {
+                        self.state.clear_selection();
+                    }
+                    self.last_pane_click = None;
+                    self.selection_autoscroll_deadline = None;
+                    self.selection_highlight_clear_deadline = None;
+                }
                 if self.state.redraw_on_focus_gained != config.ui.redraw_on_focus_gained {
                     self.state.request_client_config_reload = true;
                 }
@@ -1468,6 +1478,7 @@ impl App {
                 }
                 self.state.sound = config.ui.sound.clone();
                 self.state.toast_config = config.ui.toast.clone();
+                crate::i18n::apply_locale(&config.ui.language);
             }
         }
 
@@ -2772,7 +2783,10 @@ mod tests {
         );
         assert_eq!(app.state.agent_panel_sort, state::AgentPanelSort::Priority);
         assert!(!app.state.redraw_on_focus_gained);
-        assert!(!app.state.copy_on_select);
+        assert_eq!(
+            app.state.copy_on_select,
+            crate::config::CopyOnSelectModeConfig::Manual
+        );
         assert!(app.state.prompt_new_workspace_name);
         assert!(app.state.selection.is_some());
         assert!(app.state.selection_autoscroll.is_some());

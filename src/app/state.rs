@@ -2,6 +2,8 @@ use crate::config::{Keybinds, NewTerminalCwdConfig, SoundConfig, ToastConfig, To
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Direction, Rect};
 use ratatui::style::Color;
+use rust_i18n::t;
+use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
 
 use crate::detect::AgentState;
@@ -676,16 +678,30 @@ impl WorktreeOpenEntry {
         }
     }
 
+    /// Localized display label for the worktree status badge.
+    pub(crate) fn status_display_label(&self) -> String {
+        if self.already_open_ws_idx.is_some() {
+            t!("state.wt_open").to_string()
+        } else if self.branch.is_some() {
+            String::new()
+        } else if self.is_linked_worktree {
+            t!("state.wt_detached").to_string()
+        } else {
+            t!("state.wt_root").to_string()
+        }
+    }
+
     fn search_text(&self) -> String {
         format!(
-            "{} {} {} {}",
+            "{} {} {} {} {}",
             self.display_name(),
             self.path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or_default(),
             self.path.display(),
-            self.status_label()
+            self.status_label(),
+            self.status_display_label()
         )
         .to_lowercase()
     }
@@ -1006,15 +1022,17 @@ impl SettingsSection {
         Self::Experiments,
     ];
 
-    pub fn label(self) -> &'static str {
+    /// Localized display label for the settings tab.
+    pub fn display_label(self) -> String {
         match self {
-            Self::Theme => "theme",
-            Self::Sound => "sound",
-            Self::Toast => "toasts",
-            Self::PaneLabels => "pane labels",
-            Self::Experiments => "experiments",
-            Self::Integrations => "integrations",
+            Self::Theme => t!("state.theme"),
+            Self::Sound => t!("state.sound"),
+            Self::Toast => t!("state.toasts"),
+            Self::PaneLabels => t!("state.pane_labels"),
+            Self::Experiments => t!("state.experiments"),
+            Self::Integrations => t!("state.integrations"),
         }
+        .to_string()
     }
 }
 
@@ -1027,13 +1045,13 @@ pub(crate) enum ExperimentSetting {
 impl ExperimentSetting {
     pub(crate) const ALL: [Self; 2] = [Self::PaneHistory, Self::SwitchAsciiInputSourceInPrefix];
 
-    pub(crate) fn label(self) -> &'static str {
+    /// Localized display label for the experiment toggle row.
+    pub(crate) fn display_label(self) -> String {
         match self {
-            Self::PaneHistory => "pane screen history",
-            Self::SwitchAsciiInputSourceInPrefix => {
-                "switch to ascii input source in prefix (macOS/Windows)"
-            }
+            Self::PaneHistory => t!("state.pane_screen_history"),
+            Self::SwitchAsciiInputSourceInPrefix => t!("state.switch_ascii_input"),
         }
+        .to_string()
     }
 
     pub(crate) fn enabled(self, state: &AppState) -> bool {
@@ -1324,6 +1342,33 @@ impl ContextMenuState {
             ],
         }
     }
+
+    /// Translate a stable context-menu item identifier (the English label
+    /// returned by [`items`]) into the localized display string. The
+    /// identifiers stay English so the input handler in `modal.rs` can match
+    /// on them, while rendered text follows the active locale.
+    pub fn display_label(item: &str) -> String {
+        match item {
+            "Rename" => t!("state.ctx_rename"),
+            "Close" => t!("state.ctx_close"),
+            "Close group" => t!("state.ctx_close_group"),
+            "New worktree" => t!("state.ctx_new_worktree"),
+            "Open worktree..." => t!("state.ctx_open_worktree"),
+            "Delete worktree checkout..." => t!("state.ctx_delete_worktree"),
+            "Expand" => t!("state.ctx_expand"),
+            "Collapse" => t!("state.ctx_collapse"),
+            "New tab" => t!("state.ctx_new_tab"),
+            "Rename pane" => t!("state.ctx_rename_pane"),
+            "Clear pane name" => t!("state.ctx_clear_pane_name"),
+            "Swap with focused pane" => t!("state.ctx_swap_focused"),
+            "Split right" => t!("state.ctx_split_right"),
+            "Split down" => t!("state.ctx_split_down"),
+            "Zoom" => t!("state.ctx_zoom"),
+            "Close pane" => t!("state.ctx_close_pane"),
+            other => Cow::Owned(other.to_string()),
+        }
+        .to_string()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1513,7 +1558,7 @@ pub struct AppState {
     /// Capture mouse input for Herdr's own mouse UI. When false, Herdr only
     /// captures mouse while the focused pane app requests mouse reporting.
     pub mouse_capture: bool,
-    pub copy_on_select: bool,
+    pub copy_on_select: crate::config::CopyOnSelectModeConfig,
     pub right_click_passthrough_modifiers: Option<KeyModifiers>,
     pub right_click_passthrough: Option<RightClickPassthroughGesture>,
     pub redraw_on_focus_gained: bool,
@@ -1651,6 +1696,24 @@ impl AppState {
 
     pub(crate) fn global_menu_attention_badge_visible(&self) -> bool {
         self.update_available.is_some() || self.integration_updates_available()
+    }
+
+    /// Translate a stable global-menu identifier (the English label returned
+    /// by [`global_menu_labels`]) into the localized display string.
+    ///
+    /// The identifiers are kept stable so badge detection and tests can match
+    /// against fixed English keys while the rendered text follows the active
+    /// locale.
+    pub(crate) fn global_menu_display_label(&self, item: &str) -> String {
+        match item {
+            "settings" => t!("state.settings").to_string(),
+            "keybinds" => t!("state.keybinds").to_string(),
+            "reload config" => t!("state.reload_config").to_string(),
+            "update ready" => t!("state.update_ready").to_string(),
+            "what's new" => t!("state.what_s_new").to_string(),
+            "detach" => t!("state.detach").to_string(),
+            other => other.to_string(),
+        }
     }
 
     pub(crate) fn global_menu_item_has_badge(&self, item: &str) -> bool {
@@ -1889,7 +1952,7 @@ impl AppState {
             sidebar_spaces: crate::config::SpacesSidebarConfig::default(),
             next_agent_state_change_seq: 0,
             mouse_capture: true,
-            copy_on_select: true,
+            copy_on_select: crate::config::CopyOnSelectModeConfig::Clipboard,
             right_click_passthrough_modifiers: None,
             right_click_passthrough: None,
             redraw_on_focus_gained: true,

@@ -1,5 +1,7 @@
 use std::fmt;
 
+use rust_i18n::t;
+
 use crate::api::schema::{ErrorBody, ErrorResponse};
 
 #[derive(Debug)]
@@ -24,13 +26,20 @@ pub(super) fn mismatch_response(
     }
 
     let message = if client_protocol > server_protocol {
-        format!(
-            "client protocol {client_protocol} is newer than server protocol {server_protocol}; restart the Herdr server before using this command. {restart_guidance}"
+        t!(
+            "cli.protocol_client_newer",
+            client_protocol = client_protocol,
+            server_protocol = server_protocol,
+            restart_guidance = restart_guidance
         )
+        .to_string()
     } else {
-        format!(
-            "client protocol {client_protocol} is older than server protocol {server_protocol}; upgrade the Herdr client before using this command"
+        t!(
+            "cli.protocol_client_older",
+            client_protocol = client_protocol,
+            server_protocol = server_protocol
         )
+        .to_string()
     };
 
     Some(ErrorResponse {

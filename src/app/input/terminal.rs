@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEventKind};
 use tracing::{debug, warn};
 
 use crate::{
@@ -62,11 +62,11 @@ impl App {
 
     fn prepare_terminal_key_forward(
         &mut self,
-        source_id: InputSourceId,
+        _source_id: InputSourceId,
         key: TerminalKey,
     ) -> Option<PreparedPaneInput> {
         let key_event = key.as_key_event();
-        if self.try_copy_retained_selection(source_id, key) {
+        if self.handle_manual_selection_key(key) {
             return None;
         }
 
@@ -260,6 +260,44 @@ impl App {
                 target: TerminalInputTarget { terminal_id },
                 bytes: Bytes::from(bytes),
             }
+        }
+    }
+
+    fn handle_manual_selection_key(&mut self, key: TerminalKey) -> bool {
+        if self.state.copy_on_select != crate::config::CopyOnSelectModeConfig::Manual {
+            return false;
+        }
+        if !self
+            .state
+            .selection
+            .as_ref()
+            .is_some_and(crate::selection::Selection::is_visible)
+        {
+            return false;
+        }
+        if !key.modifiers.is_empty() {
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Enter | KeyCode::Char('y') => {
+                self.state.update_dismissed = true;
+                self.selection_autoscroll_deadline = None;
+                if key.kind != KeyEventKind::Release {
+                    self.state.copy_selection(&self.terminal_runtimes);
+                    self.dispatch_pending_clipboard_write();
+                }
+                true
+            }
+            KeyCode::Esc => {
+                self.state.update_dismissed = true;
+                self.selection_autoscroll_deadline = None;
+                if key.kind != KeyEventKind::Release {
+                    self.state.clear_selection();
+                }
+                true
+            }
+            _ => false,
         }
     }
 
@@ -683,6 +721,115 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn manual_copy_on_select_release_keeps_selection_without_clipboard_write() {
+        let (mut app, info) = app_with_screen_bytes(b"alpha beta");
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
+        let row = info.inner_rect.y;
+        let start_col = info.inner_rect.x;
+        let end_col = info.inner_rect.x + 4;
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            start_col,
+            row,
+        ));
+        app.handle_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), end_col, row));
+        app.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), end_col, row));
+
+        assert_visible_selection(&app);
+        assert!(app.event_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn manual_copy_on_select_y_copies_selection_and_clears_it() {
+        let (mut app, info) = app_with_screen_bytes(b"alpha beta");
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
+        let row = info.inner_rect.y;
+        let start_col = info.inner_rect.x;
+        let end_col = info.inner_rect.x + 4;
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            start_col,
+            row,
+        ));
+        app.handle_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), end_col, row));
+        app.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), end_col, row));
+        app.handle_terminal_key(TerminalKey::new(KeyCode::Char('y'), KeyModifiers::empty()))
+            .await;
+
+        assert_eq!(clipboard_write_content(&mut app), b"alpha");
+        assert!(app.state.selection.is_none());
+    }
+
+    #[tokio::test]
+    async fn manual_copy_on_select_enter_copies_selection_and_clears_it() {
+        let (mut app, info) = app_with_screen_bytes(b"alpha beta");
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
+        let row = info.inner_rect.y;
+        let start_col = info.inner_rect.x;
+        let end_col = info.inner_rect.x + 4;
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            start_col,
+            row,
+        ));
+        app.handle_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), end_col, row));
+        app.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), end_col, row));
+        app.handle_terminal_key(TerminalKey::new(KeyCode::Enter, KeyModifiers::empty()))
+            .await;
+
+        assert_eq!(clipboard_write_content(&mut app), b"alpha");
+        assert!(app.state.selection.is_none());
+    }
+
+    #[tokio::test]
+    async fn manual_copy_on_select_esc_clears_selection_without_clipboard_write() {
+        let (mut app, info) = app_with_screen_bytes(b"alpha beta");
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
+        let row = info.inner_rect.y;
+        let start_col = info.inner_rect.x;
+        let end_col = info.inner_rect.x + 4;
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            start_col,
+            row,
+        ));
+        app.handle_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), end_col, row));
+        app.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), end_col, row));
+        app.handle_terminal_key(TerminalKey::new(KeyCode::Esc, KeyModifiers::empty()))
+            .await;
+
+        assert!(app.state.selection.is_none());
+        assert!(app.event_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn manual_copy_on_select_does_not_use_ctrl_c_or_cmd_c() {
+        for modifiers in [KeyModifiers::CONTROL, KeyModifiers::SUPER] {
+            let (mut app, info) = app_with_screen_bytes(b"alpha beta");
+            app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
+            let row = info.inner_rect.y;
+            let start_col = info.inner_rect.x;
+            let end_col = info.inner_rect.x + 4;
+
+            app.handle_mouse(mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                start_col,
+                row,
+            ));
+            app.handle_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), end_col, row));
+            app.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), end_col, row));
+            app.handle_terminal_key_headless(TerminalKey::new(KeyCode::Char('c'), modifiers));
+
+            assert!(app.state.selection.is_none());
+            assert!(app.event_rx.try_recv().is_err());
+        }
+    }
+
+    #[tokio::test]
     async fn double_click_selects_and_copies_word() {
         let (mut app, info) = app_with_screen_bytes(b"alpha beta-gamma_delta@omega");
         let col = info.inner_rect.x + 13;
@@ -694,9 +841,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn copy_on_select_disabled_keeps_drag_selection_without_copying() {
+    async fn manual_copy_on_select_keeps_drag_selection_without_copying() {
         let (mut app, info) = app_with_screen_bytes(b"alpha beta");
-        app.state.copy_on_select = false;
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
         let row = info.inner_rect.y;
         let start_col = info.inner_rect.x;
         let end_col = info.inner_rect.x + 4;
@@ -736,30 +883,47 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn copy_on_select_disabled_retains_double_clicked_word_until_shortcut() {
+    async fn disabled_copy_on_select_ignores_drag_and_double_click_selection() {
         let (mut app, info) = app_with_screen_bytes(b"alpha beta");
-        app.state.copy_on_select = false;
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Disabled;
+        let row = info.inner_rect.y;
+        let start_col = info.inner_rect.x;
+        let end_col = info.inner_rect.x + 4;
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            start_col,
+            row,
+        ));
+        app.handle_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), end_col, row));
+        app.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), end_col, row));
+
+        assert!(app.state.selection.is_none());
+        assert!(app.event_rx.try_recv().is_err());
+
+        double_click(&mut app, start_col + 2, row);
+        assert!(app.state.selection.is_none());
+        assert!(app.event_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn manual_copy_on_select_keeps_explicit_double_click_copy() {
+        let (mut app, info) = app_with_screen_bytes(b"alpha beta");
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
         let col = info.inner_rect.x + 2;
         let row = info.inner_rect.y;
 
         double_click(&mut app, col, row);
 
-        assert_visible_selection(&app);
-        assert!(app.selection_highlight_clear_deadline.is_none());
-        assert!(app.event_rx.try_recv().is_err());
-
-        app.handle_terminal_key_headless(TerminalKey::new(
-            KeyCode::Char('c'),
-            KeyModifiers::CONTROL,
-        ));
-
         assert_eq!(clipboard_write_content(&mut app), b"alpha");
-        assert!(app.state.selection.is_none());
+        assert_visible_selection(&app);
+        assert!(app.selection_highlight_clear_deadline.is_some());
     }
 
     #[tokio::test]
     async fn new_drag_cancels_stale_double_click_highlight_deadline() {
         let (mut app, info) = app_with_screen_bytes(b"alpha beta");
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
         let row = info.inner_rect.y;
         let word_col = info.inner_rect.x + 2;
 
@@ -768,7 +932,6 @@ mod tests {
         let stale_deadline = app
             .selection_highlight_clear_deadline
             .expect("double-click highlight deadline");
-        app.state.copy_on_select = false;
 
         let start_col = info.inner_rect.x + 6;
         let end_col = info.inner_rect.x + 9;
@@ -1159,7 +1322,7 @@ mod tests {
         app.state.selected = 0;
         app.state.mode = Mode::Terminal;
         app.state.view.pane_infos = pane_infos;
-        app.state.copy_on_select = false;
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Disabled;
 
         let col = info.inner_rect.x + 2;
         let row = info.inner_rect.y + 3;

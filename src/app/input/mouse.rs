@@ -636,12 +636,14 @@ impl AppState {
                         mouse.row - info.inner_rect.y,
                         mouse.column - info.inner_rect.x,
                     );
-                    self.selection = Some(Selection::anchor(
-                        info.id,
-                        row,
-                        col,
-                        self.pane_scroll_metrics(terminal_runtimes, info.id),
-                    ));
+                    if self.copy_on_select.is_enabled() {
+                        self.selection = Some(Selection::anchor(
+                            info.id,
+                            row,
+                            col,
+                            self.pane_scroll_metrics(terminal_runtimes, info.id),
+                        ));
+                    }
                     return self.mouse_pane_focus_action(info.id);
                 } else if let Some(info) = self.view.pane_infos.iter().find(|p| {
                     mouse.column >= p.rect.x
@@ -810,11 +812,23 @@ impl AppState {
                     if was_click {
                         self.selection = None;
                     } else if was_finalized {
-                        // Double-click already finalized this word selection.
-                    } else if self.copy_on_select {
-                        self.copy_selection(terminal_runtimes);
-                    } else if let Some(selection) = self.selection.as_mut() {
-                        selection.finish();
+                        // Double-click copy already finalized this selection.
+                    } else {
+                        match self.copy_on_select {
+                            crate::config::CopyOnSelectModeConfig::Clipboard => {
+                                self.copy_selection(terminal_runtimes);
+                            }
+                            crate::config::CopyOnSelectModeConfig::Manual => {
+                                if let Some(selection) = self.selection.as_mut() {
+                                    if !selection.finish() {
+                                        self.selection = None;
+                                    }
+                                }
+                            }
+                            crate::config::CopyOnSelectModeConfig::Disabled => {
+                                self.selection = None;
+                            }
+                        }
                     }
                     return None;
                 }

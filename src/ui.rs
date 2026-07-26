@@ -19,7 +19,7 @@ mod sidebar;
 mod status;
 mod tab_surface;
 mod tabs;
-mod text;
+pub(crate) mod text;
 mod widgets;
 
 use self::dialogs::{

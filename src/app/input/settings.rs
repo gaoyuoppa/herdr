@@ -7,6 +7,7 @@ use crate::{
         App, Mode,
     },
     config::ToastDelivery,
+    ui::text::display_width_u16,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -351,7 +352,9 @@ impl AppState {
             } else {
                 0
             };
-            let width = section.label().len() as u16 + 2 + badge_width;
+            // 用显示宽度(中文每字 2 cell)而非字节长度,确保点击区域与渲染一致。
+            // 渲染用 display_label()(已汉化),点击区域也必须按其显示宽度算。
+            let width = display_width_u16(&section.display_label()) + 2 + badge_width;
             if col >= x && col < x + width {
                 return Some(*section);
             }
@@ -742,10 +745,10 @@ mod tests {
                     } else {
                         0
                     };
-                    section.label().len() as u16 + 3 + badge_width
+                    display_width_u16(&section.display_label()) + 3 + badge_width
                 })
                 .sum::<u16>();
-        let dotted_width = SettingsSection::Integrations.label().len() as u16 + 4;
+        let dotted_width = display_width_u16(&SettingsSection::Integrations.display_label()) + 4;
 
         assert_eq!(
             state.settings_tab_at(integrations_x + dotted_width - 1, tab_y),

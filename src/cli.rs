@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rust_i18n::t;
 use serde::Serialize;
 
 use crate::api::client::{ApiClient, ApiClientError};
@@ -758,7 +759,7 @@ fn ensure_server_protocol_compatible(client: &ApiClient, request_id: &str) -> st
     let status = client.status().map_err(api_client_error_to_io)?;
     let server_protocol = status
         .protocol
-        .ok_or_else(|| std::io::Error::other("server ping did not include a protocol version"))?;
+        .ok_or_else(|| std::io::Error::other(t!("cli.server_ping_missing_protocol").to_string()))?;
     let Some(response) = protocol_guard::mismatch_response(
         request_id,
         server_protocol,

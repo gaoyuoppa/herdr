@@ -2,6 +2,8 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 mod agent_view;
+use rust_i18n::t;
+
 mod agents;
 mod env;
 mod integrations;
@@ -436,7 +438,7 @@ impl App {
             return;
         }
         self.state.copy_feedback = Some(crate::app::state::CopyFeedback {
-            message: "copied to clipboard".to_string(),
+            message: t!("toast.copied_clipboard").to_string(),
         });
         self.copy_feedback_deadline = Some(Instant::now() + super::COPY_FEEDBACK_DURATION);
     }

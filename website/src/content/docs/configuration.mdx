@@ -256,6 +256,10 @@ Color values accept hex, named colors, `rgb(r,g,b)`, or reset aliases like `rese
 
 The sidebar is the main Herdr dashboard. Search `ui.` in the [Config reference](/docs/config-reference/) for sizing, collapsed mode, Agent panel ordering, mouse behavior, pane borders, and other presentation settings.
 
+`copy_on_select = true` and `copy_on_select = "clipboard"` keep the default behavior: drag-selecting terminal text copies it immediately. Set it to `false` or `"manual"` to keep the selection highlighted until `Enter` or `y` copies it or `Esc` cancels it. Set it to `"disabled"` to disable mouse text selection and copying.
+
+`host_cursor` controls whether Herdr uses the outer terminal's native cursor or draws its own cursor as terminal cell content. The default, `auto`, draws Herdr's cursor on Windows and WSL to avoid cursor flicker during active redraws, and uses the native cursor elsewhere.
+
 ### Sidebar row layouts
 
 The expanded desktop sidebar renders each inner array in `rows` as one line. These are the complete default layouts:

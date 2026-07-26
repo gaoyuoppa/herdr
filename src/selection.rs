@@ -7,7 +7,10 @@
 //!   MouseUp           → Selection finalized; optionally copied by the caller
 //!   Next click / key  → A retained selection is cleared
 //!
-//! Double-click selects a word; the caller decides whether to copy it immediately.
+//! When `ui.copy_on_select = "manual"`, MouseUp only finalizes the selection.
+//! Enter/y copies it, and Esc clears it.
+//!
+//! Double-click copy also briefly highlights the selected word.
 //!
 //! Rows are stored in screen-buffer coordinates instead of viewport-relative
 //! coordinates. That keeps selection stable while the pane scrolls.

@@ -1,1 +1,2 @@
 packaging/windows/licenses/* binary
+*.sh text eol=lf

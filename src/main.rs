@@ -67,7 +67,10 @@ mod detect;
 mod events;
 mod ghostty;
 mod handoff_runtime;
+mod i18n;
 mod input;
+
+rust_i18n::i18n!("locales", fallback = "en");
 mod integration;
 mod ipc;
 mod kitty_graphics;
@@ -269,10 +272,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Pane apps like lazygit and btop can still receive mouse when they request it.
 # mouse_capture = true
 
-# Automatically copy text selected with the mouse.
-# Set false to retain drag or double-click word selection until Ctrl+C,
-# or Cmd+C when the host forwards it, copies and clears it.
-# copy_on_select = true
+# Mouse selection behavior: true or "clipboard" copies immediately; false or
+# "manual" keeps the selection for Enter/y to copy or Esc to cancel.
+# Use "disabled" to disable mouse text selection and copying entirely.
+# copy_on_select = "clipboard"
 
 # Host cursor policy: "auto", "native", or "drawn".
 # "auto" draws Herdr's own cursor on native Windows builds and WSL to avoid ConPTY cursor flicker, and uses the native terminal cursor elsewhere.
@@ -342,6 +345,9 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Accent color for highlights, borders, and navigation UI.
 # Accepts: hex (#89b4fa), named colors (cyan, blue, magenta), or rgb(r,g,b)
 # accent = "cyan"
+
+# UI language: "en" for English (default) or "zh" for 简体中文.
+# language = "en"
 
 # Background notification popup delivery
 [ui.toast]
@@ -487,6 +493,13 @@ fn main() -> io::Result<()> {
         eprintln!("error: --remote can only be used with the default launch command");
         eprintln!("run 'herdr --help' for usage");
         std::process::exit(2);
+    }
+
+    // CLI 子命令（update/status 等）分发前先应用语言设置，
+    // 确保这些命令的输出也使用 config.toml 中的 ui.language。
+    {
+        let early_config = config::Config::load();
+        i18n::apply_locale(&early_config.config.ui.language);
     }
 
     match cli::maybe_run(&args) {
@@ -722,6 +735,7 @@ fn main() -> io::Result<()> {
 
     let loaded_config = config::Config::load();
     exit_if_nested_disabled(&loaded_config.config);
+    i18n::apply_locale(&loaded_config.config.ui.language);
 
     let no_session = args.iter().any(|a| a == "--no-session");
 

@@ -1,6 +1,7 @@
 //! Pure state mutations on AppState.
 //! These don't need channels, async, or PTY runtime.
 
+use std::borrow::Cow;
 use std::time::Instant;
 
 use tracing::{info, warn};
@@ -13,6 +14,7 @@ use crate::layout::{find_in_direction, NavDirection};
 use crate::selection::Selection;
 use crate::terminal::{EffectiveStateChange, TerminalStateMutation};
 use crate::workspace::WorkspaceGitStatus;
+use rust_i18n::t;
 
 use super::api_helpers::pane_agent_status;
 use super::state::{
@@ -194,11 +196,11 @@ fn toast_agent_label(agent_label: &str) -> &str {
     agent_label
 }
 
-fn toast_event_text(kind: ToastKind) -> &'static str {
+fn toast_event_text(kind: ToastKind) -> Cow<'static, str> {
     match kind {
-        ToastKind::NeedsAttention => "needs attention",
-        ToastKind::Finished => "finished",
-        ToastKind::UpdateInstalled => "updated",
+        ToastKind::NeedsAttention => t!("toast.needs_attention"),
+        ToastKind::Finished => t!("toast.finished"),
+        ToastKind::UpdateInstalled => t!("toast.updated"),
     }
 }
 
@@ -2195,7 +2197,7 @@ impl AppState {
             return false;
         }
 
-        let text = if self.copy_on_select {
+        let text = if self.copy_on_select.is_enabled() {
             let Some(text) = rt
                 .extract_selection(&selection)
                 .filter(|text| !text.is_empty())
@@ -2730,7 +2732,8 @@ impl AppState {
                 ) {
                     self.toast = Some(ToastNotification {
                         kind: ToastKind::UpdateInstalled,
-                        title: format!("v{version} available"),
+                        title: t!("toast.version_available", version = version.as_str())
+                            .to_string(),
                         context: crate::update::update_install_instruction(&install_command),
                         position: None,
                         target: None,
@@ -2760,7 +2763,7 @@ impl AppState {
                         .join(", ");
                     self.toast = Some(ToastNotification {
                         kind: ToastKind::UpdateInstalled,
-                        title: "Agent detection rules updated".to_string(),
+                        title: t!("toast.agent_rules_updated").to_string(),
                         context: agent_list,
                         position: None,
                         target: None,

@@ -252,6 +252,12 @@ yellow = "#f9e2af"
 
 侧边栏是 Herdr 的主仪表盘。在[配置参考](/docs/config-reference/)中搜索 `ui.`，可查看尺寸、折叠模式、Agent 面板排序、鼠标行为、窗格边框和其他显示设置。
 
+`copy_on_select = true` 和 `copy_on_select = "clipboard"` 保持默认行为：鼠标拖选终端文本后立即复制。设置为 `false` 或 `"manual"` 时，选区会保持高亮，按 `Enter` 或 `y` 复制，按 `Esc` 取消。设置为 `"disabled"` 会禁用鼠标文本选择和复制。
+
+`host_cursor` 控制 Herdr 使用外部终端的原生光标还是自行绘制光标。默认值 `auto` 会在 Windows 和 WSL 上使用绘制光标以减少重绘闪烁，在其他平台使用原生光标。
+
+如需让 Ctrl+右键手势传给启用鼠标上报的窗格应用，而不是打开 Herdr 菜单，可设置 `right_click_passthrough_modifier = "ctrl"`。
+
 ### 侧边栏行布局
 
 展开的桌面侧边栏会将 `rows` 中的每个内层数组渲染为一行。以下是完整的默认布局：
