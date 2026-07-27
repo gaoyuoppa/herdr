@@ -1,6 +1,6 @@
 ---
 title: Integrations
-description: Install Herdr integrations for Pi, OMP, Claude Code, Codex, GitHub Copilot CLI, Devin CLI, Droid, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, Qoder CLI, Cursor Agent CLI, MastraCode, and Grok CLI.
+description: Install Herdr integrations for Pi, OMP, Claude Code, Codex, Qwen Code, GitHub Copilot CLI, Devin CLI, Droid, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, Qoder CLI, Cursor Agent CLI, MastraCode, and Grok CLI.
 ---
 
 Herdr detects supported agents automatically. Official integrations can add native session identity for restore, lifecycle state reports, or both.
@@ -23,6 +23,7 @@ herdr integration install kimi
 herdr integration install opencode
 herdr integration install kilo
 herdr integration install hermes
+herdr integration install qwen
 herdr integration install qodercli
 herdr integration install cursor
 herdr integration install mastracode
@@ -43,6 +44,7 @@ herdr integration uninstall kimi
 herdr integration uninstall opencode
 herdr integration uninstall kilo
 herdr integration uninstall hermes
+herdr integration uninstall qwen
 herdr integration uninstall qodercli
 herdr integration uninstall cursor
 herdr integration uninstall mastracode
@@ -55,7 +57,7 @@ Herdr uses integrations in two different ways:
 
 | Integration type | Agents | Effect |
 | --- | --- | --- |
-| Lifecycle authority | Pi, OMP, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, MastraCode | When installed and actively reporting for the pane, hook or plugin events author `idle`, `working`, and `blocked`. Herdr does not also use screen manifest fallback for that same lifecycle authority. |
+| Lifecycle authority | Pi, OMP, Qwen Code, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, MastraCode | When installed and actively reporting for the pane, hook or plugin events author `idle`, `working`, and `blocked`. Herdr does not also use screen manifest fallback for that same lifecycle authority. |
 | Session identity | Claude Code, Codex, GitHub Copilot CLI, Devin CLI, Droid, Qoder CLI, Cursor Agent CLI, Grok CLI | The integration reports native session references for restore. State still comes from Herdr's screen manifest detection. |
 
 Custom socket integrations can also report state when they define state that is not visible in the native terminal UI.
@@ -213,6 +215,20 @@ herdr integration install hermes
 Herdr writes `~/.hermes/plugins/herdr-agent-state/` and enables `herdr-agent-state` in `~/.hermes/config.yaml`. The Hermes config directory must already exist. Restart Hermes after installing so the plugin loads. Uninstall removes the plugin directory and removes `herdr-agent-state` from `plugins.enabled`.
 
 The plugin reports lifecycle, tool, approval state, and session id while Hermes runs inside a Herdr pane. Herdr can use the reported session id to resume the pane with `hermes --resume <id>`. Native screen manifest detection remains available when the plugin is not installed.
+
+## Qwen Code
+
+Install the Qwen Code hook:
+
+```bash
+herdr integration install qwen
+```
+
+The hook maps Qwen Code session, prompt, tool, permission, notification, compaction, stop, and release events to authoritative `working`, `blocked`, and `idle` state while Qwen runs inside a Herdr pane. When the hook is absent, Herdr falls back to the Qwen screen manifest.
+
+Herdr uses `~/.qwen` by default, or `QWEN_HOME` when set. The Qwen config directory must already exist. Install writes `hooks/herdr-agent-state.sh` (or `.ps1` on Windows) and adds only Herdr-owned entries under the top-level `hooks` object in `settings.json`. Existing models, MCP servers, settings, and third-party hooks are preserved. Reinstall repairs Herdr entries without duplicating them; uninstall removes only those entries and the Herdr-owned script.
+
+The hook records Qwen's session id as live pane identity. Herdr does not currently use it for native session restore because no stable Qwen resume command is wired into Herdr.
 
 ## Qoder CLI
 
