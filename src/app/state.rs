@@ -644,6 +644,9 @@ impl Palette {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkspaceCardArea {
     pub ws_idx: usize,
+    /// Stable position in the logical expanded workspace list. Unlike the
+    /// viewport-relative row, this keeps zebra striping stable while scrolling.
+    pub entry_idx: usize,
     pub rect: Rect,
     pub indented: bool,
 }
@@ -848,6 +851,7 @@ pub enum Mode {
     Resize,
     ConfirmClose,
     ContextMenu,
+    PaneLayout,
     Settings,
     GlobalMenu,
     KeybindHelp,
@@ -856,7 +860,10 @@ pub enum Mode {
 
 impl Mode {
     pub(crate) fn mouse_motion_changes_view(self) -> bool {
-        matches!(self, Self::GlobalMenu | Self::ContextMenu | Self::Navigator)
+        matches!(
+            self,
+            Self::GlobalMenu | Self::ContextMenu | Self::PaneLayout | Self::Navigator
+        )
     }
 
     /// Whether keys in this mode are commands/navigation (an ASCII input source is wanted) rather
@@ -880,6 +887,7 @@ impl Mode {
                 | Mode::ConfirmClose
                 | Mode::ConfirmRemoveWorktree
                 | Mode::ContextMenu
+                | Mode::PaneLayout
                 | Mode::GlobalMenu
                 | Mode::KeybindHelp
         )
@@ -1251,7 +1259,65 @@ pub enum ContextMenuKind {
         pane_id: PaneId,
         source_pane_id: Option<PaneId>,
         has_manual_label: bool,
+        can_rearrange: bool,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextMenuAction {
+    Rename,
+    Close,
+    CloseGroup,
+    NewWorktree,
+    OpenWorktree,
+    DeleteWorktree,
+    Expand,
+    Collapse,
+    NewTab,
+    RenamePane,
+    ClearPaneName,
+    SwapFocused,
+    RepositionPane,
+    LayoutTemplates,
+    SplitRight,
+    SplitDown,
+    Zoom,
+    ClosePane,
+}
+
+impl ContextMenuAction {
+    pub fn display_label(self) -> String {
+        match self {
+            Self::Rename => t!("state.ctx_rename"),
+            Self::Close => t!("state.ctx_close"),
+            Self::CloseGroup => t!("state.ctx_close_group"),
+            Self::NewWorktree => t!("state.ctx_new_worktree"),
+            Self::OpenWorktree => t!("state.ctx_open_worktree"),
+            Self::DeleteWorktree => t!("state.ctx_delete_worktree"),
+            Self::Expand => t!("state.ctx_expand"),
+            Self::Collapse => t!("state.ctx_collapse"),
+            Self::NewTab => t!("state.ctx_new_tab"),
+            Self::RenamePane => t!("state.ctx_rename_pane"),
+            Self::ClearPaneName => t!("state.ctx_clear_pane_name"),
+            Self::SwapFocused => t!("state.ctx_swap_focused"),
+            Self::RepositionPane => t!("state.ctx_reposition_pane"),
+            Self::LayoutTemplates => t!("state.ctx_layout_templates"),
+            Self::SplitRight => t!("state.ctx_split_right"),
+            Self::SplitDown => t!("state.ctx_split_down"),
+            Self::Zoom => t!("state.ctx_zoom"),
+            Self::ClosePane => t!("state.ctx_close_pane"),
+        }
+        .to_string()
+    }
+
+    fn section(self) -> u8 {
+        match self {
+            Self::Rename | Self::RenamePane | Self::ClearPaneName | Self::NewTab => 0,
+            Self::Close | Self::CloseGroup | Self::ClosePane => 3,
+            Self::Zoom => 2,
+            _ => 1,
+        }
+    }
 }
 
 /// Right-click context menu state.
@@ -1263,119 +1329,254 @@ pub struct ContextMenuState {
 }
 
 impl ContextMenuState {
-    pub fn items(&self) -> &'static [&'static str] {
-        match self.kind {
-            ContextMenuKind::Workspace { .. } => &["Rename", "Close"],
+    pub fn actions(&self) -> Vec<ContextMenuAction> {
+        let mut actions = match self.kind {
+            ContextMenuKind::Workspace { .. } => {
+                vec![ContextMenuAction::Rename, ContextMenuAction::Close]
+            }
             ContextMenuKind::GitWorkspace {
                 is_linked_worktree: false,
                 has_worktree_children: false,
                 ..
-            } => &["Rename", "Close", "New worktree", "Open worktree..."],
+            } => vec![
+                ContextMenuAction::Rename,
+                ContextMenuAction::NewWorktree,
+                ContextMenuAction::OpenWorktree,
+                ContextMenuAction::Close,
+            ],
             ContextMenuKind::GitWorkspace {
                 is_linked_worktree: true,
                 ..
-            } => &["Rename", "Close", "Delete worktree checkout..."],
+            } => vec![
+                ContextMenuAction::Rename,
+                ContextMenuAction::DeleteWorktree,
+                ContextMenuAction::Close,
+            ],
             ContextMenuKind::GitWorkspace {
                 is_linked_worktree: false,
                 has_worktree_children: true,
                 collapsed: true,
                 ..
-            } => &[
-                "Rename",
-                "Close group",
-                "New worktree",
-                "Open worktree...",
-                "Expand",
+            } => vec![
+                ContextMenuAction::Rename,
+                ContextMenuAction::NewWorktree,
+                ContextMenuAction::OpenWorktree,
+                ContextMenuAction::Expand,
+                ContextMenuAction::CloseGroup,
             ],
             ContextMenuKind::GitWorkspace {
                 is_linked_worktree: false,
                 has_worktree_children: true,
                 collapsed: false,
                 ..
-            } => &[
-                "Rename",
-                "Close group",
-                "New worktree",
-                "Open worktree...",
-                "Collapse",
+            } => vec![
+                ContextMenuAction::Rename,
+                ContextMenuAction::NewWorktree,
+                ContextMenuAction::OpenWorktree,
+                ContextMenuAction::Collapse,
+                ContextMenuAction::CloseGroup,
             ],
-            ContextMenuKind::Tab { .. } => &["New tab", "Rename", "Close"],
-            ContextMenuKind::Pane {
-                has_manual_label: true,
-                source_pane_id: Some(_),
-                ..
-            } => &[
-                "Rename pane",
-                "Clear pane name",
-                "Swap with focused pane",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
+            ContextMenuKind::Tab { .. } => vec![
+                ContextMenuAction::NewTab,
+                ContextMenuAction::Rename,
+                ContextMenuAction::Close,
             ],
             ContextMenuKind::Pane {
-                has_manual_label: false,
-                source_pane_id: Some(_),
+                source_pane_id,
+                has_manual_label,
+                can_rearrange,
                 ..
-            } => &[
-                "Rename pane",
-                "Swap with focused pane",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
-            ],
-            ContextMenuKind::Pane {
-                has_manual_label: true,
-                source_pane_id: None,
-                ..
-            } => &[
-                "Rename pane",
-                "Clear pane name",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
-            ],
-            ContextMenuKind::Pane {
-                has_manual_label: false,
-                source_pane_id: None,
-                ..
-            } => &[
-                "Rename pane",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
-            ],
-        }
+            } => {
+                let mut pane_actions = vec![ContextMenuAction::RenamePane];
+                if has_manual_label {
+                    pane_actions.push(ContextMenuAction::ClearPaneName);
+                }
+                if source_pane_id.is_some() {
+                    pane_actions.push(ContextMenuAction::SwapFocused);
+                }
+                if can_rearrange {
+                    pane_actions.push(ContextMenuAction::RepositionPane);
+                    pane_actions.push(ContextMenuAction::LayoutTemplates);
+                }
+                pane_actions.extend([
+                    ContextMenuAction::SplitRight,
+                    ContextMenuAction::SplitDown,
+                    ContextMenuAction::Zoom,
+                    ContextMenuAction::ClosePane,
+                ]);
+                pane_actions
+            }
+        };
+        actions.shrink_to_fit();
+        actions
     }
 
-    /// Translate a stable context-menu item identifier (the English label
-    /// returned by [`items`]) into the localized display string. The
-    /// identifiers stay English so the input handler in `modal.rs` can match
-    /// on them, while rendered text follows the active locale.
-    pub fn display_label(item: &str) -> String {
-        match item {
-            "Rename" => t!("state.ctx_rename"),
-            "Close" => t!("state.ctx_close"),
-            "Close group" => t!("state.ctx_close_group"),
-            "New worktree" => t!("state.ctx_new_worktree"),
-            "Open worktree..." => t!("state.ctx_open_worktree"),
-            "Delete worktree checkout..." => t!("state.ctx_delete_worktree"),
-            "Expand" => t!("state.ctx_expand"),
-            "Collapse" => t!("state.ctx_collapse"),
-            "New tab" => t!("state.ctx_new_tab"),
-            "Rename pane" => t!("state.ctx_rename_pane"),
-            "Clear pane name" => t!("state.ctx_clear_pane_name"),
-            "Swap with focused pane" => t!("state.ctx_swap_focused"),
-            "Split right" => t!("state.ctx_split_right"),
-            "Split down" => t!("state.ctx_split_down"),
-            "Zoom" => t!("state.ctx_zoom"),
-            "Close pane" => t!("state.ctx_close_pane"),
-            other => Cow::Owned(other.to_string()),
+    pub fn row_count(&self) -> usize {
+        let actions = self.actions();
+        actions.len()
+            + actions
+                .windows(2)
+                .filter(|pair| pair[0].section() != pair[1].section())
+                .count()
+    }
+
+    #[cfg(test)]
+    pub fn visual_row_for_action(&self, action_idx: usize) -> Option<usize> {
+        let actions = self.actions();
+        if action_idx >= actions.len() {
+            return None;
         }
-        .to_string()
+        let separators = actions[..=action_idx]
+            .windows(2)
+            .filter(|pair| pair[0].section() != pair[1].section())
+            .count();
+        Some(action_idx + separators)
+    }
+
+    pub fn action_at_visual_row(&self, visual_row: usize) -> Option<usize> {
+        let actions = self.actions();
+        let mut row = 0usize;
+        for (idx, action) in actions.iter().enumerate() {
+            if idx > 0 && actions[idx - 1].section() != action.section() {
+                if row == visual_row {
+                    return None;
+                }
+                row += 1;
+            }
+            if row == visual_row {
+                return Some(idx);
+            }
+            row += 1;
+        }
+        None
+    }
+
+    pub fn has_separator_before(&self, action_idx: usize) -> bool {
+        let actions = self.actions();
+        action_idx > 0
+            && action_idx < actions.len()
+            && actions[action_idx - 1].section() != actions[action_idx].section()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum PaneLayoutInteraction {
+    Reposition {
+        target_pane_id: PaneId,
+        placement: crate::layout::PanePlacement,
+    },
+    Preset {
+        preset: crate::layout::LayoutPreset,
+    },
+    Transfer(PaneTransferState),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PaneLayoutInteractionState {
+    pub ws_idx: usize,
+    pub tab_idx: usize,
+    pub source_pane_id: PaneId,
+    pub interaction: PaneLayoutInteraction,
+}
+
+impl PaneLayoutInteractionState {
+    pub(crate) fn transfer_source(&self) -> Option<&PaneTransferSource> {
+        match &self.interaction {
+            PaneLayoutInteraction::Transfer(transfer) => Some(&transfer.source),
+            PaneLayoutInteraction::Reposition { .. } | PaneLayoutInteraction::Preset { .. } => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PaneTransferSource {
+    pub workspace_id: String,
+    pub tab_id: String,
+    pub pane_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaneTransferOrigin {
+    TitleDrag,
+    ContextMenu,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PaneTransferDestination {
+    PaneEdge {
+        workspace_id: String,
+        tab_id: String,
+        pane_id: String,
+        placement: crate::layout::PanePlacement,
+    },
+    NewTab {
+        workspace_id: String,
+    },
+    NewWorkspace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PaneTransferState {
+    pub source: PaneTransferSource,
+    pub origin: PaneTransferOrigin,
+    pub selected: Option<PaneTransferDestination>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PaneTransferCandidate {
+    pub destination: PaneTransferDestination,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PreviewPaneRole {
+    Existing,
+    Source,
+    Target,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PaneTransferPreviewRect {
+    pub rect: Rect,
+    pub role: PreviewPaneRole,
+}
+
+fn split_transfer_preview_rect(
+    rect: Rect,
+    placement: crate::layout::PanePlacement,
+) -> (Rect, Rect) {
+    match placement {
+        crate::layout::PanePlacement::Left | crate::layout::PanePlacement::Right => {
+            let leading_width = rect.width / 2;
+            let trailing_width = rect.width.saturating_sub(leading_width);
+            let leading = Rect::new(rect.x, rect.y, leading_width, rect.height);
+            let trailing = Rect::new(
+                rect.x.saturating_add(leading_width),
+                rect.y,
+                trailing_width,
+                rect.height,
+            );
+            if placement == crate::layout::PanePlacement::Left {
+                (leading, trailing)
+            } else {
+                (trailing, leading)
+            }
+        }
+        crate::layout::PanePlacement::Up | crate::layout::PanePlacement::Down => {
+            let leading_height = rect.height / 2;
+            let trailing_height = rect.height.saturating_sub(leading_height);
+            let leading = Rect::new(rect.x, rect.y, rect.width, leading_height);
+            let trailing = Rect::new(
+                rect.x,
+                rect.y.saturating_add(leading_height),
+                rect.width,
+                trailing_height,
+            );
+            if placement == crate::layout::PanePlacement::Up {
+                (leading, trailing)
+            } else {
+                (trailing, leading)
+            }
+        }
     }
 }
 
@@ -1531,6 +1732,7 @@ pub struct AppState {
     pub selection: Option<Selection>,
     pub selection_autoscroll: Option<SelectionAutoscroll>,
     pub context_menu: Option<ContextMenuState>,
+    pub(crate) pane_layout: Option<PaneLayoutInteractionState>,
     // Notifications
     pub update_available: Option<String>,
     pub update_install_command: String,
@@ -1659,6 +1861,213 @@ pub struct AppState {
 impl AppState {
     pub(crate) fn mark_session_dirty(&mut self) {
         self.session_dirty = true;
+    }
+
+    pub(crate) fn pane_layout_preview(&self) -> Option<crate::layout::TileLayout> {
+        let interaction = self.pane_layout.as_ref()?;
+        let tab = self
+            .workspaces
+            .get(interaction.ws_idx)?
+            .tabs
+            .get(interaction.tab_idx)?;
+        let mut preview = tab.layout.clone();
+        match &interaction.interaction {
+            PaneLayoutInteraction::Reposition {
+                target_pane_id,
+                placement,
+            } => {
+                let _ = preview.reposition_pane(
+                    interaction.source_pane_id,
+                    *target_pane_id,
+                    *placement,
+                    0.5,
+                );
+            }
+            PaneLayoutInteraction::Preset { preset } => {
+                let mut panes = tab.layout.panes(self.view.terminal_area);
+                panes.sort_by_key(|pane| (pane.rect.y, pane.rect.x));
+                let ordered_panes = panes.into_iter().map(|pane| pane.id).collect::<Vec<_>>();
+                let _ = preview.apply_preset(&ordered_panes, interaction.source_pane_id, *preset);
+            }
+            PaneLayoutInteraction::Transfer(_) => return None,
+        }
+        Some(preview)
+    }
+
+    pub(crate) fn pane_transfer_candidates(&self) -> Vec<PaneTransferCandidate> {
+        let Some(source) = self
+            .pane_layout
+            .as_ref()
+            .and_then(PaneLayoutInteractionState::transfer_source)
+        else {
+            return Vec::new();
+        };
+        let mut candidates = Vec::new();
+        for workspace in &self.workspaces {
+            for tab in &workspace.tabs {
+                if tab.zoomed {
+                    continue;
+                }
+                for pane_id in tab.layout.pane_ids() {
+                    let Some(pane_number) = workspace.public_pane_number(pane_id) else {
+                        continue;
+                    };
+                    let pane_id =
+                        crate::workspace::public_pane_id_for_number(&workspace.id, pane_number);
+                    if pane_id == source.pane_id {
+                        continue;
+                    }
+                    let tab_id =
+                        crate::workspace::public_tab_id_for_number(&workspace.id, tab.number);
+                    for placement in [
+                        crate::layout::PanePlacement::Left,
+                        crate::layout::PanePlacement::Right,
+                        crate::layout::PanePlacement::Up,
+                        crate::layout::PanePlacement::Down,
+                    ] {
+                        candidates.push(PaneTransferCandidate {
+                            destination: PaneTransferDestination::PaneEdge {
+                                workspace_id: workspace.id.clone(),
+                                tab_id: tab_id.clone(),
+                                pane_id: pane_id.clone(),
+                                placement,
+                            },
+                        });
+                    }
+                }
+            }
+        }
+        candidates.extend(
+            self.workspaces
+                .iter()
+                .map(|workspace| PaneTransferCandidate {
+                    destination: PaneTransferDestination::NewTab {
+                        workspace_id: workspace.id.clone(),
+                    },
+                }),
+        );
+        candidates.push(PaneTransferCandidate {
+            destination: PaneTransferDestination::NewWorkspace,
+        });
+        candidates
+    }
+
+    pub(crate) fn pane_transfer_preview(&self) -> Option<Vec<PaneTransferPreviewRect>> {
+        let interaction = self.pane_layout.as_ref()?;
+        let PaneLayoutInteraction::Transfer(transfer) = &interaction.interaction else {
+            return None;
+        };
+        let (source_ws_idx, source_tab_idx, source_pane_id) = self.resolve_pane_transfer_identity(
+            &transfer.source.workspace_id,
+            &transfer.source.tab_id,
+            &transfer.source.pane_id,
+        )?;
+        if self.workspaces[source_ws_idx].tabs[source_tab_idx].zoomed {
+            return None;
+        }
+        let selected = transfer.selected.as_ref()?;
+        match selected {
+            PaneTransferDestination::PaneEdge {
+                workspace_id,
+                tab_id,
+                pane_id,
+                placement,
+            } => {
+                let (target_ws_idx, target_tab_idx, target_pane_id) =
+                    self.resolve_pane_transfer_identity(workspace_id, tab_id, pane_id)?;
+                if source_pane_id == target_pane_id
+                    || self.workspaces[target_ws_idx].tabs[target_tab_idx].zoomed
+                {
+                    return None;
+                }
+                if source_ws_idx == target_ws_idx && source_tab_idx == target_tab_idx {
+                    let mut preview = self.workspaces[source_ws_idx].tabs[source_tab_idx]
+                        .layout
+                        .clone();
+                    if !preview.reposition_pane(source_pane_id, target_pane_id, *placement, 0.5) {
+                        return None;
+                    }
+                    return Some(
+                        preview
+                            .panes(self.view.terminal_area)
+                            .into_iter()
+                            .map(|pane| PaneTransferPreviewRect {
+                                rect: pane.rect,
+                                role: if pane.id == source_pane_id {
+                                    PreviewPaneRole::Source
+                                } else if pane.id == target_pane_id {
+                                    PreviewPaneRole::Target
+                                } else {
+                                    PreviewPaneRole::Existing
+                                },
+                            })
+                            .collect(),
+                    );
+                }
+
+                let target_tab = &self.workspaces[target_ws_idx].tabs[target_tab_idx];
+                let mut preview = Vec::new();
+                for pane in target_tab.layout.panes(self.view.terminal_area) {
+                    if pane.id != target_pane_id {
+                        preview.push(PaneTransferPreviewRect {
+                            rect: pane.rect,
+                            role: PreviewPaneRole::Existing,
+                        });
+                        continue;
+                    }
+                    let (source_rect, target_rect) =
+                        split_transfer_preview_rect(pane.rect, *placement);
+                    preview.push(PaneTransferPreviewRect {
+                        rect: target_rect,
+                        role: PreviewPaneRole::Target,
+                    });
+                    preview.push(PaneTransferPreviewRect {
+                        rect: source_rect,
+                        role: PreviewPaneRole::Source,
+                    });
+                }
+                (!preview.is_empty()).then_some(preview)
+            }
+            PaneTransferDestination::NewTab { workspace_id } => self
+                .workspaces
+                .iter()
+                .any(|workspace| workspace.id == *workspace_id)
+                .then_some(vec![PaneTransferPreviewRect {
+                    rect: self.view.terminal_area,
+                    role: PreviewPaneRole::Source,
+                }]),
+            PaneTransferDestination::NewWorkspace => Some(vec![PaneTransferPreviewRect {
+                rect: self.view.terminal_area,
+                role: PreviewPaneRole::Source,
+            }]),
+        }
+    }
+
+    fn resolve_pane_transfer_identity(
+        &self,
+        workspace_id: &str,
+        tab_id: &str,
+        pane_id: &str,
+    ) -> Option<(usize, usize, PaneId)> {
+        let ws_idx = self
+            .workspaces
+            .iter()
+            .position(|workspace| workspace.id == workspace_id)?;
+        let workspace = &self.workspaces[ws_idx];
+        let tab_idx = workspace.tabs.iter().position(|tab| {
+            crate::workspace::public_tab_id_for_number(&workspace.id, tab.number) == tab_id
+        })?;
+        let pane_id = workspace
+            .public_pane_numbers
+            .iter()
+            .find_map(|(candidate, number)| {
+                (crate::workspace::public_pane_id_for_number(&workspace.id, *number) == pane_id)
+                    .then_some(*candidate)
+            })?;
+        workspace.tabs[tab_idx]
+            .panes
+            .contains_key(&pane_id)
+            .then_some((ws_idx, tab_idx, pane_id))
     }
 
     pub(crate) fn remove_alias_shadowed_by_new_pane(&mut self, pane_id: PaneId) {
@@ -1926,6 +2335,7 @@ impl AppState {
             selection: None,
             selection_autoscroll: None,
             context_menu: None,
+            pane_layout: None,
             update_available: None,
             update_install_command: "herdr update".into(),
             latest_release_notes_available: false,
@@ -2279,6 +2689,68 @@ impl AppState {
         if let Some(gesture) = &self.right_click_passthrough {
             assert_live_pane(gesture.pane_info.id, "right-click passthrough gesture");
         }
+        if let Some(layout) = &self.pane_layout {
+            match &layout.interaction {
+                PaneLayoutInteraction::Reposition { target_pane_id, .. } => {
+                    assert_tab_index(layout.ws_idx, layout.tab_idx, "pane layout interaction");
+                    assert_live_pane(layout.source_pane_id, "pane layout source");
+                    let tab = &self.workspaces[layout.ws_idx].tabs[layout.tab_idx];
+                    assert!(
+                        tab.panes.contains_key(&layout.source_pane_id),
+                        "pane layout source must belong to its recorded tab"
+                    );
+                    assert_live_pane(*target_pane_id, "pane layout target");
+                    assert!(
+                        tab.panes.contains_key(target_pane_id),
+                        "pane layout target must belong to its recorded tab"
+                    );
+                    assert_ne!(
+                        layout.source_pane_id, *target_pane_id,
+                        "pane layout source and target must differ"
+                    );
+                }
+                PaneLayoutInteraction::Preset { .. } => {
+                    assert_tab_index(layout.ws_idx, layout.tab_idx, "pane layout interaction");
+                    assert_live_pane(layout.source_pane_id, "pane layout source");
+                    assert!(
+                        self.workspaces[layout.ws_idx].tabs[layout.tab_idx]
+                            .panes
+                            .contains_key(&layout.source_pane_id),
+                        "pane layout source must belong to its recorded tab"
+                    );
+                }
+                PaneLayoutInteraction::Transfer(transfer) => {
+                    assert!(
+                        self.resolve_pane_transfer_identity(
+                            &transfer.source.workspace_id,
+                            &transfer.source.tab_id,
+                            &transfer.source.pane_id,
+                        )
+                        .is_some(),
+                        "pane transfer source must resolve by stable public identity"
+                    );
+                    match transfer.selected.as_ref() {
+                        Some(PaneTransferDestination::PaneEdge {
+                            workspace_id,
+                            tab_id,
+                            pane_id,
+                            ..
+                        }) => assert!(
+                            self.resolve_pane_transfer_identity(workspace_id, tab_id, pane_id)
+                                .is_some(),
+                            "pane transfer target must resolve by stable public identity"
+                        ),
+                        Some(PaneTransferDestination::NewTab { workspace_id }) => assert!(
+                            self.workspaces
+                                .iter()
+                                .any(|workspace| workspace.id == *workspace_id),
+                            "pane transfer new-tab workspace must resolve"
+                        ),
+                        Some(PaneTransferDestination::NewWorkspace) | None => {}
+                    }
+                }
+            }
+        }
         if let Some(drag) = &self.drag {
             match &drag.target {
                 DragTarget::WorkspaceReorder {
@@ -2571,8 +3043,12 @@ mod tests {
         };
 
         assert_eq!(
-            menu.items(),
-            &["Rename", "Close", "Delete worktree checkout..."]
+            menu.actions(),
+            vec![
+                ContextMenuAction::Rename,
+                ContextMenuAction::DeleteWorktree,
+                ContextMenuAction::Close,
+            ]
         );
     }
 
@@ -2591,8 +3067,13 @@ mod tests {
         };
 
         assert_eq!(
-            menu.items(),
-            &["Rename", "Close", "New worktree", "Open worktree..."]
+            menu.actions(),
+            vec![
+                ContextMenuAction::Rename,
+                ContextMenuAction::NewWorktree,
+                ContextMenuAction::OpenWorktree,
+                ContextMenuAction::Close,
+            ]
         );
     }
 
@@ -2611,14 +3092,65 @@ mod tests {
         };
 
         assert_eq!(
-            menu.items(),
-            &[
-                "Rename",
-                "Close group",
-                "New worktree",
-                "Open worktree...",
-                "Collapse"
+            menu.actions(),
+            vec![
+                ContextMenuAction::Rename,
+                ContextMenuAction::NewWorktree,
+                ContextMenuAction::OpenWorktree,
+                ContextMenuAction::Collapse,
+                ContextMenuAction::CloseGroup,
             ]
         );
+    }
+
+    #[test]
+    fn pane_context_menu_groups_layout_actions_and_maps_separator_rows() {
+        let pane_id = PaneId::from_raw(1);
+        let menu = ContextMenuState {
+            kind: ContextMenuKind::Pane {
+                ws_idx: 0,
+                tab_idx: 0,
+                pane_id,
+                source_pane_id: None,
+                has_manual_label: false,
+                can_rearrange: true,
+            },
+            x: 0,
+            y: 0,
+            list: MenuListState::new(0),
+        };
+        let actions = menu.actions();
+        assert!(actions.contains(&ContextMenuAction::RepositionPane));
+        assert!(actions.contains(&ContextMenuAction::LayoutTemplates));
+        assert!(menu.row_count() > actions.len());
+        for action_idx in 0..actions.len() {
+            let row = menu
+                .visual_row_for_action(action_idx)
+                .expect("action visual row");
+            assert_eq!(menu.action_at_visual_row(row), Some(action_idx));
+            if menu.has_separator_before(action_idx) {
+                assert_eq!(menu.action_at_visual_row(row.saturating_sub(1)), None);
+            }
+        }
+
+        let disabled = ContextMenuState {
+            kind: ContextMenuKind::Pane {
+                ws_idx: 0,
+                tab_idx: 0,
+                pane_id,
+                source_pane_id: None,
+                has_manual_label: false,
+                can_rearrange: false,
+            },
+            x: 0,
+            y: 0,
+            list: MenuListState::new(0),
+        };
+        assert!(!disabled
+            .actions()
+            .contains(&ContextMenuAction::RepositionPane));
+        assert!(!disabled
+            .actions()
+            .contains(&ContextMenuAction::LayoutTemplates));
     }
 }
