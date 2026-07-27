@@ -599,14 +599,17 @@ impl App {
                 mobile_menu_hit_area: Rect::default(),
                 toast_hit_area: Rect::default(),
                 pane_infos: Vec::new(),
+                pane_title_regions: Vec::new(),
                 split_borders: Vec::new(),
             },
             drag: None,
             workspace_press: None,
             tab_press: None,
+            pane_title_press: None,
             selection: None,
             selection_autoscroll: None,
             context_menu: None,
+            pane_layout: None,
             update_available,
             update_install_command,
             latest_release_notes_available,
@@ -1791,6 +1794,9 @@ impl App {
             Mode::ContextMenu => {
                 self.handle_context_menu_key_via_api(key_event);
             }
+            Mode::PaneLayout => {
+                self.handle_pane_layout_key_via_api(key_event);
+            }
             Mode::KeybindHelp => {
                 input::handle_keybind_help_key(&mut self.state, key);
             }
@@ -1988,6 +1994,7 @@ mod tests {
             Mode::ConfirmClose,
             Mode::ConfirmRemoveWorktree,
             Mode::ContextMenu,
+            Mode::PaneLayout,
             Mode::GlobalMenu,
             Mode::KeybindHelp,
         ] {

@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Clear, Paragraph},
     Frame,
 };
 use rust_i18n::t;
@@ -308,24 +308,33 @@ pub(super) fn render_context_menu(app: &AppState, frame: &mut Frame) {
         return;
     };
 
-    let items: Vec<ListItem> = menu
-        .items()
-        .iter()
-        .map(|item| {
-            ListItem::new(Line::from(
-                crate::app::state::ContextMenuState::display_label(item),
-            ))
-        })
-        .collect();
-    let list = List::new(items)
-        .style(Style::default().fg(p.text))
-        .highlight_style(
+    let actions = menu.actions();
+    let mut visual_row = 0u16;
+    for (idx, action) in actions.iter().copied().enumerate() {
+        if menu.has_separator_before(idx) {
+            let separator = "─".repeat(inner.width as usize);
+            frame.render_widget(
+                Paragraph::new(separator).style(Style::default().fg(p.surface1)),
+                Rect::new(inner.x, inner.y + visual_row, inner.width, 1),
+            );
+            visual_row = visual_row.saturating_add(1);
+        }
+        if visual_row >= inner.height {
+            break;
+        }
+        let selected = idx == menu.list.highlighted;
+        let style = if selected {
             Style::default()
                 .bg(p.accent)
                 .fg(panel_contrast_fg(p))
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol(" ");
-    let mut state = ListState::default().with_selected(Some(menu.list.highlighted));
-    frame.render_stateful_widget(list, inner, &mut state);
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(p.text)
+        };
+        frame.render_widget(
+            Paragraph::new(format!(" {}", action.display_label())).style(style),
+            Rect::new(inner.x, inner.y + visual_row, inner.width, 1),
+        );
+        visual_row = visual_row.saturating_add(1);
+    }
 }

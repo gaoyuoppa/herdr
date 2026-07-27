@@ -4,6 +4,7 @@ use ratatui::layout::{Direction, Rect};
 use ratatui::style::Color;
 use rust_i18n::t;
 use std::hash::{Hash, Hasher};
+use std::time::Instant;
 
 use crate::detect::AgentState;
 use crate::layout::{PaneId, PaneInfo, SplitBorder};
@@ -790,6 +791,12 @@ pub enum ViewLayout {
     Mobile,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PaneTitleRegion {
+    pub pane_id: PaneId,
+    pub rect: Rect,
+}
+
 pub struct ViewState {
     pub layout: ViewLayout,
     pub sidebar_rect: Rect,
@@ -804,6 +811,7 @@ pub struct ViewState {
     pub mobile_menu_hit_area: Rect,
     pub toast_hit_area: Rect,
     pub pane_infos: Vec<PaneInfo>,
+    pub(crate) pane_title_regions: Vec<PaneTitleRegion>,
     pub split_borders: Vec<SplitBorder>,
 }
 
@@ -1268,6 +1276,7 @@ pub enum ContextMenuAction {
     RenamePane,
     ClearPaneName,
     SwapFocused,
+    MoveOrDetach,
     RepositionPane,
     LayoutTemplates,
     SplitRight,
@@ -1291,6 +1300,7 @@ impl ContextMenuAction {
             Self::RenamePane => t!("state.ctx_rename_pane"),
             Self::ClearPaneName => t!("state.ctx_clear_pane_name"),
             Self::SwapFocused => t!("state.ctx_swap_focused"),
+            Self::MoveOrDetach => t!("state.ctx_move_or_detach"),
             Self::RepositionPane => t!("state.ctx_reposition_pane"),
             Self::LayoutTemplates => t!("state.ctx_layout_templates"),
             Self::SplitRight => t!("state.ctx_split_right"),
@@ -1385,6 +1395,7 @@ impl ContextMenuState {
                 if source_pane_id.is_some() {
                     pane_actions.push(ContextMenuAction::SwapFocused);
                 }
+                pane_actions.push(ContextMenuAction::MoveOrDetach);
                 if can_rearrange {
                     pane_actions.push(ContextMenuAction::RepositionPane);
                     pane_actions.push(ContextMenuAction::LayoutTemplates);
@@ -1484,6 +1495,14 @@ pub(crate) struct PaneTransferSource {
     pub workspace_id: String,
     pub tab_id: String,
     pub pane_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PaneTitlePressState {
+    pub source: PaneTransferSource,
+    pub started_at: Instant,
+    pub start_col: u16,
+    pub start_row: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1720,6 +1739,7 @@ pub struct AppState {
     pub(crate) drag: Option<DragState>,
     pub(crate) workspace_press: Option<WorkspacePressState>,
     pub(crate) tab_press: Option<TabPressState>,
+    pub(crate) pane_title_press: Option<PaneTitlePressState>,
     pub selection: Option<Selection>,
     pub selection_autoscroll: Option<SelectionAutoscroll>,
     pub context_menu: Option<ContextMenuState>,
@@ -1940,6 +1960,32 @@ impl AppState {
             destination: PaneTransferDestination::NewWorkspace,
         });
         candidates
+    }
+
+    pub(crate) fn pane_transfer_source(
+        &self,
+        ws_idx: usize,
+        tab_idx: usize,
+        pane_id: PaneId,
+    ) -> Option<PaneTransferSource> {
+        let workspace = self.workspaces.get(ws_idx)?;
+        let tab = workspace.tabs.get(tab_idx)?;
+        if !tab.panes.contains_key(&pane_id) {
+            return None;
+        }
+        let pane_number = workspace.public_pane_number(pane_id)?;
+        Some(PaneTransferSource {
+            workspace_id: workspace.id.clone(),
+            tab_id: crate::workspace::public_tab_id_for_number(&workspace.id, tab.number),
+            pane_id: crate::workspace::public_pane_id_for_number(&workspace.id, pane_number),
+        })
+    }
+
+    pub(crate) fn resolve_pane_transfer_source(
+        &self,
+        source: &PaneTransferSource,
+    ) -> Option<(usize, usize, PaneId)> {
+        self.resolve_pane_transfer_identity(&source.workspace_id, &source.tab_id, &source.pane_id)
     }
 
     pub(crate) fn pane_transfer_preview(&self) -> Option<Vec<PaneTransferPreviewRect>> {
@@ -2325,11 +2371,13 @@ impl AppState {
                 mobile_menu_hit_area: Rect::default(),
                 toast_hit_area: Rect::default(),
                 pane_infos: Vec::new(),
+                pane_title_regions: Vec::new(),
                 split_borders: Vec::new(),
             },
             drag: None,
             workspace_press: None,
             tab_press: None,
+            pane_title_press: None,
             selection: None,
             selection_autoscroll: None,
             context_menu: None,
