@@ -1049,6 +1049,9 @@ impl App {
             Method::PaneMove(params) => return self.handle_pane_move(request.id, params),
             Method::PaneZoom(params) => return self.handle_pane_zoom(request.id, params),
             Method::PaneLayout(params) => return self.handle_pane_layout(request.id, params),
+            Method::LayoutRearrange(params) => {
+                return self.handle_layout_rearrange(request.id, params);
+            }
             Method::PaneProcessInfo(params) => {
                 return self.handle_pane_process_info(request.id, params);
             }
