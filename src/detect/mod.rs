@@ -539,6 +539,27 @@ fn agent_name_from_known_package_path(path: &str) -> Option<String> {
         .map(normalized_agent_lookup_name)
         .collect();
 
+    for (package_index, window) in components.windows(3).enumerate() {
+        if window != ["node_modules", "@qwen-code", "qwen-code"] {
+            continue;
+        }
+
+        let entrypoint = &components[package_index + 3..];
+        let is_qwen_entrypoint = matches!(
+            entrypoint,
+            [file] if matches!(file.as_str(), "cli" | "cli-entry")
+        ) || matches!(
+            entrypoint,
+            [directory, file]
+                if (directory == "scripts" && file == "cli-entry")
+                    || (directory == "dist"
+                        && matches!(file.as_str(), "cli" | "index"))
+        );
+        if is_qwen_entrypoint {
+            return Some(agent_label(Agent::Qwen).to_string());
+        }
+    }
+
     for window in components.windows(5) {
         if window
             == [
@@ -860,6 +881,85 @@ mod tests {
             identify_agent_in_job(&job),
             Some((Agent::Qwen, "qwen".to_string()))
         );
+    }
+
+    #[test]
+    fn identify_agent_in_job_detects_current_qwen_code_package_entrypoints() {
+        let commands: [(&str, &[&str]); 5] = [
+            (
+                "node.exe",
+                &[
+                    "node.exe",
+                    "C:\\Users\\herdr\\AppData\\Roaming\\npm\\node_modules\\@qwen-code\\qwen-code\\cli-entry.js",
+                ],
+            ),
+            (
+                "node.exe",
+                &[
+                    "node.exe",
+                    "--expose-gc",
+                    "C:\\Users\\herdr\\.qwen\\updates\\npm\\hash\\versions\\0.21.0\\node_modules\\@qwen-code\\qwen-code\\cli.js",
+                ],
+            ),
+            (
+                "node",
+                &[
+                    "node",
+                    "/usr/local/lib/node_modules/@qwen-code/qwen-code/scripts/cli-entry.js",
+                ],
+            ),
+            (
+                "node",
+                &[
+                    "node",
+                    "--expose-gc",
+                    "/home/herdr/qwen-code/node_modules/@qwen-code/qwen-code/dist/cli.js",
+                ],
+            ),
+            (
+                "node",
+                &[
+                    "node",
+                    "/home/herdr/qwen-code/node_modules/@qwen-code/qwen-code/dist/index.js",
+                ],
+            ),
+        ];
+
+        for (runtime, argv) in commands {
+            let job = crate::platform::ForegroundJob {
+                process_group_id: 123,
+                processes: vec![foreground_process(123, runtime, argv)],
+            };
+
+            assert_eq!(
+                identify_agent_in_job(&job),
+                Some((Agent::Qwen, "qwen".to_string())),
+                "failed to identify Qwen Code command: {argv:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn identify_agent_in_job_ignores_non_entrypoint_qwen_package_scripts() {
+        let scripts = [
+            "/tmp/node_modules/other/cli.js",
+            "/tmp/node_modules/@qwen-code/qwen-code/scripts/build.js",
+            "/tmp/node_modules/@qwen-code/qwen-code/node_modules/other/cli.js",
+            "/tmp/node_modules/@qwen-code/qwen-code-extra/cli.js",
+        ];
+
+        for script in scripts {
+            let job = crate::platform::ForegroundJob {
+                process_group_id: 123,
+                processes: vec![foreground_process(123, "node", &["node", script])],
+            };
+
+            assert_eq!(
+                identify_agent_in_job(&job),
+                None,
+                "unexpectedly identified non-Qwen entrypoint: {script}"
+            );
+        }
     }
 
     #[test]
