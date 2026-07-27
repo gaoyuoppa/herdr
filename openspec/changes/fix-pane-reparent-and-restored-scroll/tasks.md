@@ -15,5 +15,5 @@
 
 ## 4. Validation and deployment
 
-- [ ] 4.1 Run targeted tests, formatting/lint checks, the repository validation recipe, and a Linux release build; record any scoped exclusions
-- [ ] 4.2 Back up and live-handoff deploy the validated binary to `192.168.31.4`, then verify pane IDs, child PIDs, agent sessions, layout moves, and scroll continuity without submitting upstream
+- [x] 4.1 Run targeted tests, formatting/lint checks, the repository validation recipe, and a Linux release build; record any scoped exclusions
+- [x] 4.2 Back up and live-handoff deploy the validated binary to `192.168.31.4`, then verify pane IDs, child PIDs, agent sessions, layout moves, and scroll continuity without submitting upstream
