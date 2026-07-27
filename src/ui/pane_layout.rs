@@ -98,7 +98,8 @@ fn render_transfer_targets(app: &AppState, frame: &mut Frame, area: Rect) {
         return;
     };
     let candidates = app.pane_transfer_candidates();
-    if candidates.is_empty() || area.width < 24 || area.height < 5 {
+    let picker = pane_transfer_target_picker_rect(area, candidates.len());
+    if picker == Rect::default() {
         return;
     }
     let selected_idx = transfer
@@ -110,26 +111,13 @@ fn render_transfer_targets(app: &AppState, frame: &mut Frame, area: Rect) {
                 .position(|candidate| &candidate.destination == selected)
         })
         .unwrap_or(0);
-    let height = area
-        .height
-        .saturating_sub(2)
-        .min(candidates.len().min(10) as u16 + 2);
-    let width = area.width.min(44);
-    let picker = Rect::new(
-        area.x.saturating_add(area.width.saturating_sub(width)),
-        area.y,
-        width,
-        height,
-    );
     frame.render_widget(Clear, picker);
     let Some(inner) = render_panel_shell(frame, picker, app.palette.accent, app.palette.panel_bg)
     else {
         return;
     };
     let visible = inner.height as usize;
-    let start = selected_idx
-        .saturating_sub(visible.saturating_sub(1))
-        .min(candidates.len().saturating_sub(visible));
+    let start = pane_transfer_visible_start(candidates.len(), selected_idx, visible);
     for (row, candidate) in candidates.iter().skip(start).take(visible).enumerate() {
         let idx = start + row;
         let selected = idx == selected_idx;
@@ -153,15 +141,89 @@ fn render_transfer_targets(app: &AppState, frame: &mut Frame, area: Rect) {
     }
 }
 
+pub(crate) fn pane_transfer_destination_at(
+    app: &AppState,
+    area: Rect,
+    col: u16,
+    row: u16,
+) -> Option<PaneTransferDestination> {
+    let PaneLayoutInteraction::Transfer(transfer) = &app.pane_layout.as_ref()?.interaction else {
+        return None;
+    };
+    let candidates = app.pane_transfer_candidates();
+    let picker = pane_transfer_target_picker_rect(area, candidates.len());
+    if picker == Rect::default() {
+        return None;
+    }
+    let inner = Block::default().borders(Borders::ALL).inner(picker);
+    if col < inner.x
+        || col >= inner.x.saturating_add(inner.width)
+        || row < inner.y
+        || row >= inner.y.saturating_add(inner.height)
+    {
+        return None;
+    }
+    let selected_idx = transfer
+        .selected
+        .as_ref()
+        .and_then(|selected| {
+            candidates
+                .iter()
+                .position(|candidate| &candidate.destination == selected)
+        })
+        .unwrap_or(0);
+    let start = pane_transfer_visible_start(candidates.len(), selected_idx, inner.height as usize);
+    candidates
+        .get(start + row.saturating_sub(inner.y) as usize)
+        .map(|candidate| candidate.destination.clone())
+}
+
+fn pane_transfer_target_picker_rect(area: Rect, candidate_count: usize) -> Rect {
+    if candidate_count == 0 || area.width < 24 || area.height < 5 {
+        return Rect::default();
+    }
+    let height = area
+        .height
+        .saturating_sub(2)
+        .min(candidate_count.min(10) as u16 + 2);
+    let width = area.width.min(44);
+    Rect::new(
+        area.x.saturating_add(area.width.saturating_sub(width)),
+        area.y,
+        width,
+        height,
+    )
+}
+
+fn pane_transfer_visible_start(
+    candidate_count: usize,
+    selected_idx: usize,
+    visible: usize,
+) -> usize {
+    selected_idx
+        .saturating_sub(visible.saturating_sub(1))
+        .min(candidate_count.saturating_sub(visible))
+}
+
 fn transfer_destination_label(destination: &PaneTransferDestination) -> String {
     match destination {
         PaneTransferDestination::PaneEdge {
             pane_id, placement, ..
-        } => format!("{pane_id} · {placement:?}"),
-        PaneTransferDestination::NewTab { workspace_id } => {
-            format!("{workspace_id} · new tab")
+        } => {
+            let direction = match placement {
+                crate::layout::PanePlacement::Left => "←",
+                crate::layout::PanePlacement::Right => "→",
+                crate::layout::PanePlacement::Up => "↑",
+                crate::layout::PanePlacement::Down => "↓",
+            };
+            format!("{pane_id} · {direction}")
         }
-        PaneTransferDestination::NewWorkspace => "new workspace".into(),
+        PaneTransferDestination::NewTab { workspace_id } => {
+            format!("{workspace_id} · {}", t!("state.pane_transfer_new_tab"))
+        }
+        PaneTransferDestination::NewWorkspace => {
+            t!("state.pane_transfer_new_workspace").to_string()
+        }
     }
 }
 
@@ -217,10 +279,17 @@ fn render_instruction_bar(app: &AppState, frame: &mut Frame, area: Rect) {
             t!("state.layout_templates_title").to_string(),
             t!("state.layout_templates_hint").to_string(),
         ),
-        PaneLayoutInteraction::Transfer(_) => (
-            t!("state.layout_move_title").to_string(),
-            t!("state.layout_move_hint").to_string(),
-        ),
+        PaneLayoutInteraction::Transfer(transfer) => {
+            let target = transfer
+                .selected
+                .as_ref()
+                .map(transfer_destination_label)
+                .unwrap_or_else(|| "—".into());
+            (
+                t!("state.pane_transfer_title").to_string(),
+                format!("{target} · {}", t!("state.layout_move_hint")),
+            )
+        }
     };
     let bar = Rect::new(
         area.x,

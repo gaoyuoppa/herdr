@@ -11,6 +11,7 @@ mod menus;
 mod mobile;
 mod navigator;
 mod onboarding;
+mod pane_layout;
 mod panes;
 mod release_notes;
 mod scrollbar;
@@ -39,6 +40,7 @@ use self::mobile::{
 use self::navigator::render_navigator_overlay;
 pub(crate) use self::onboarding::onboarding_welcome_continue_rect;
 use self::onboarding::render_onboarding_overlay;
+use self::pane_layout::render_pane_layout_overlay;
 pub(crate) use self::panes::popup_pane_rects;
 use self::panes::{render_empty, render_popup_pane, resize_popup_pane};
 pub(crate) use self::release_notes::{
@@ -94,6 +96,7 @@ pub(crate) use self::{
         mobile_switcher_areas, mobile_switcher_max_scroll, mobile_switcher_target_at,
         mobile_switcher_workspace_doc_range, MobileSwitcherTarget,
     },
+    pane_layout::{pane_layout_preset_at, pane_transfer_destination_at},
     panes::{apply_pane_chrome, pane_inner_rect, pane_is_scrolled_back},
     tab_surface::{tab_surface_cursor, tab_surface_hyperlinks, TabSurfaceView},
     tabs::compute_tab_bar_view,
@@ -303,6 +306,19 @@ fn compute_view_internal(
             )
         })
         .unwrap_or_default();
+    let pane_title_regions = app
+        .active
+        .and_then(|ws_idx| app.workspaces.get(ws_idx))
+        .map(|workspace| {
+            pane_infos
+                .iter()
+                .filter_map(|info| {
+                    panes::pane_border_title_view(app, workspace, info)
+                        .and_then(|title| panes::pane_title_region(info, &title, area))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     app.view = crate::app::ViewState {
         layout: ViewLayout::Desktop,
@@ -318,6 +334,7 @@ fn compute_view_internal(
         mobile_menu_hit_area: Rect::default(),
         toast_hit_area,
         pane_infos,
+        pane_title_regions,
         split_borders,
     };
     app.sync_copy_mode_search_geometry();
@@ -366,6 +383,19 @@ fn compute_mobile_view(
         .as_ref()
         .map(|_| mobile_toast_banner_rect(area, app.config_diagnostic.is_some()))
         .unwrap_or_default();
+    let pane_title_regions = app
+        .active
+        .and_then(|ws_idx| app.workspaces.get(ws_idx))
+        .map(|workspace| {
+            pane_infos
+                .iter()
+                .filter_map(|info| {
+                    panes::pane_border_title_view(app, workspace, info)
+                        .and_then(|title| panes::pane_title_region(info, &title, area))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     app.view = crate::app::ViewState {
         layout: ViewLayout::Mobile,
@@ -381,6 +411,7 @@ fn compute_mobile_view(
         mobile_menu_hit_area: header_hits.menu,
         toast_hit_area,
         pane_infos,
+        pane_title_regions,
         split_borders,
     };
     app.sync_copy_mode_search_geometry();
@@ -445,6 +476,7 @@ pub fn render_with_runtime_registry(
         Mode::ContextMenu => {
             render_context_menu(app, frame);
         }
+        Mode::PaneLayout => render_pane_layout_overlay(app, frame, terminal_area),
         Mode::Settings => render_settings_overlay(app, frame, frame.area()),
         Mode::RenameWorkspace | Mode::RenameTab | Mode::RenamePane => {
             render_rename_overlay(app, frame, frame.area())

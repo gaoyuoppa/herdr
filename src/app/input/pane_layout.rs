@@ -7,8 +7,7 @@ use crate::{
     app::{
         state::{
             AppState, Mode, PaneLayoutInteraction, PaneLayoutInteractionState,
-            PaneTransferCandidate, PaneTransferDestination, PaneTransferOrigin, PaneTransferSource,
-            PaneTransferState,
+            PaneTransferCandidate, PaneTransferDestination, PaneTransferOrigin, PaneTransferState,
         },
         App,
     },
@@ -94,22 +93,18 @@ pub(super) fn open_pane_transfer(
     tab_idx: usize,
     source_pane_id: PaneId,
 ) -> bool {
-    let Some(workspace) = state.workspaces.get(ws_idx) else {
-        return false;
-    };
-    let Some(tab) = workspace.tabs.get(tab_idx) else {
+    let Some(tab) = state
+        .workspaces
+        .get(ws_idx)
+        .and_then(|workspace| workspace.tabs.get(tab_idx))
+    else {
         return false;
     };
     if tab.zoomed || !tab.panes.contains_key(&source_pane_id) {
         return false;
     }
-    let Some(source_pane_number) = workspace.public_pane_number(source_pane_id) else {
+    let Some(source) = state.pane_transfer_source(ws_idx, tab_idx, source_pane_id) else {
         return false;
-    };
-    let source = PaneTransferSource {
-        workspace_id: workspace.id.clone(),
-        tab_id: crate::workspace::public_tab_id_for_number(&workspace.id, tab.number),
-        pane_id: crate::workspace::public_pane_id_for_number(&workspace.id, source_pane_number),
     };
 
     state.context_menu = None;
@@ -190,7 +185,49 @@ pub(crate) fn update_pane_layout_from_mouse(state: &mut AppState, col: u16, row:
             }
             true
         }
-        PaneLayoutInteraction::Transfer(_) => false,
+        PaneLayoutInteraction::Transfer(transfer) => {
+            if let Some(destination) =
+                crate::ui::pane_transfer_destination_at(state, state.view.terminal_area, col, row)
+            {
+                set_transfer_destination(state, destination);
+                return true;
+            }
+            let Some(target) = state
+                .view
+                .pane_infos
+                .iter()
+                .find(|pane| rect_contains(pane.rect, col, row))
+                .cloned()
+            else {
+                return false;
+            };
+            let Some(ws_idx) = state.active else {
+                return false;
+            };
+            let Some(tab_idx) = state
+                .workspaces
+                .get(ws_idx)
+                .map(crate::workspace::Workspace::active_tab_index)
+            else {
+                return false;
+            };
+            let Some(target_source) = state.pane_transfer_source(ws_idx, tab_idx, target.id) else {
+                return false;
+            };
+            if target_source.pane_id == transfer.source.pane_id {
+                return false;
+            }
+            set_transfer_destination(
+                state,
+                PaneTransferDestination::PaneEdge {
+                    workspace_id: target_source.workspace_id,
+                    tab_id: target_source.tab_id,
+                    pane_id: target_source.pane_id,
+                    placement: nearest_edge(target.rect, col, row),
+                },
+            );
+            true
+        }
     }
 }
 

@@ -6,8 +6,8 @@ use tracing::warn;
 use crate::{
     app::state::{
         AgentPanelSort, AppState, ContextMenuKind, ContextMenuState, DragState, DragTarget,
-        MenuListState, Mode, RightClickPassthroughGesture, TabPressState, ViewLayout,
-        WorkspacePressState,
+        MenuListState, Mode, PaneTitlePressState, PaneTransferOrigin, RightClickPassthroughGesture,
+        TabPressState, ViewLayout, WorkspacePressState,
     },
     layout::{PaneInfo, SplitBorder},
     selection::Selection,
@@ -57,6 +57,7 @@ pub(super) enum MouseAction {
     },
     RenameModal(ModalAction),
     ConfirmCloseAccept,
+    CommitPaneLayout,
     ContextMenu {
         menu: ContextMenuState,
         idx: usize,
@@ -67,6 +68,16 @@ enum MobileMouseResult {
     Ignored,
     Consumed,
     Action(MouseAction),
+}
+
+pub(crate) fn pane_title_drag_ready(
+    press: &crate::app::state::PaneTitlePressState,
+    now: std::time::Instant,
+    col: u16,
+    row: u16,
+) -> bool {
+    now.saturating_duration_since(press.started_at) >= std::time::Duration::from_millis(250)
+        && (col.abs_diff(press.start_col) >= 1 || row.abs_diff(press.start_row) >= 1)
 }
 
 impl AppState {
@@ -103,8 +114,28 @@ impl AppState {
         terminal_runtimes: &mut TerminalRuntimeRegistry,
         mouse: MouseEvent,
     ) -> Option<MouseAction> {
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Right)) {
+            self.pane_title_press = None;
+        }
         if self.mode == Mode::Onboarding {
             self.handle_onboarding_mouse(mouse);
+            return None;
+        }
+
+        if self.mode == Mode::PaneLayout {
+            return self.handle_pane_layout_mouse(mouse);
+        }
+
+        if matches!(
+            mouse.kind,
+            MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Moved
+        ) && self.continue_pane_title_press(mouse.column, mouse.row)
+        {
+            return None;
+        }
+        if matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))
+            && self.pane_title_press.take().is_some()
+        {
             return None;
         }
 
@@ -225,6 +256,7 @@ impl AppState {
                 self.selection = None;
                 self.selection_autoscroll = None;
                 self.workspace_press = None;
+                self.pane_title_press = None;
 
                 if self.mode == Mode::ConfirmClose {
                     let popup = self.confirm_close_rect();
@@ -420,6 +452,29 @@ impl AppState {
                         }
                     }
                     return None;
+                }
+
+                if !in_sidebar && self.mode == Mode::Terminal {
+                    let title = self
+                        .view
+                        .pane_title_regions
+                        .iter()
+                        .find(|region| rect_contains(region.rect, mouse.column, mouse.row))
+                        .cloned();
+                    if let (Some(ws_idx), Some(title)) = (self.active, title) {
+                        let tab_idx = self.workspaces.get(ws_idx)?.active_tab_index();
+                        if let Some(source) =
+                            self.pane_transfer_source(ws_idx, tab_idx, title.pane_id)
+                        {
+                            self.pane_title_press = Some(PaneTitlePressState {
+                                source,
+                                started_at: std::time::Instant::now(),
+                                start_col: mouse.column,
+                                start_row: mouse.row,
+                            });
+                            return self.mouse_pane_focus_action(title.pane_id);
+                        }
+                    }
                 }
 
                 if self.on_sidebar_divider(mouse.column, mouse.row) {
@@ -1106,6 +1161,11 @@ impl AppState {
                         .and_then(|pane| self.terminals.get(&pane.attached_terminal_id))
                         .and_then(|terminal| terminal.manual_label.as_ref())
                         .is_some();
+                    let can_rearrange = self
+                        .workspaces
+                        .get(ws_idx)
+                        .and_then(|workspace| workspace.tabs.get(tab_idx))
+                        .is_some_and(|tab| !tab.zoomed && tab.layout.pane_count() > 1);
                     self.context_menu = Some(ContextMenuState {
                         kind: ContextMenuKind::Pane {
                             ws_idx,
@@ -1113,6 +1173,7 @@ impl AppState {
                             pane_id: info.id,
                             source_pane_id,
                             has_manual_label,
+                            can_rearrange,
                         },
                         x: mouse.column,
                         y: mouse.row,
@@ -1126,6 +1187,72 @@ impl AppState {
         }
 
         None
+    }
+
+    fn handle_pane_layout_mouse(&mut self, mouse: MouseEvent) -> Option<MouseAction> {
+        let transfer_origin = self.pane_layout.as_ref().and_then(|layout| {
+            let crate::app::state::PaneLayoutInteraction::Transfer(transfer) = &layout.interaction
+            else {
+                return None;
+            };
+            Some(transfer.origin)
+        });
+        match mouse.kind {
+            MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
+                super::pane_layout::update_pane_layout_from_mouse(self, mouse.column, mouse.row);
+                None
+            }
+            MouseEventKind::Down(MouseButton::Left)
+                if transfer_origin == Some(PaneTransferOrigin::ContextMenu) =>
+            {
+                super::pane_layout::update_pane_layout_from_mouse(self, mouse.column, mouse.row)
+                    .then_some(MouseAction::CommitPaneLayout)
+            }
+            MouseEventKind::Up(MouseButton::Left)
+                if transfer_origin == Some(PaneTransferOrigin::TitleDrag) =>
+            {
+                if super::pane_layout::update_pane_layout_from_mouse(self, mouse.column, mouse.row)
+                {
+                    Some(MouseAction::CommitPaneLayout)
+                } else {
+                    super::pane_layout::cancel_pane_layout(self);
+                    None
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) if transfer_origin.is_none() => {
+                super::pane_layout::update_pane_layout_from_mouse(self, mouse.column, mouse.row)
+                    .then_some(MouseAction::CommitPaneLayout)
+            }
+            MouseEventKind::Down(MouseButton::Right) => {
+                super::pane_layout::cancel_pane_layout(self);
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn continue_pane_title_press(&mut self, col: u16, row: u16) -> bool {
+        let Some(press) = self.pane_title_press.clone() else {
+            return false;
+        };
+        if !pane_title_drag_ready(&press, std::time::Instant::now(), col, row) {
+            return true;
+        }
+        let resolved = self.resolve_pane_transfer_source(&press.source);
+        self.pane_title_press = None;
+        let Some((ws_idx, tab_idx, pane_id)) = resolved else {
+            return true;
+        };
+        if super::pane_layout::open_pane_transfer(
+            self,
+            PaneTransferOrigin::TitleDrag,
+            ws_idx,
+            tab_idx,
+            pane_id,
+        ) {
+            super::pane_layout::update_pane_layout_from_mouse(self, col, row);
+        }
+        true
     }
 
     fn handle_mobile_mouse(&mut self, mouse: MouseEvent) -> MobileMouseResult {
@@ -1227,13 +1354,13 @@ impl AppState {
         let menu = self.context_menu.as_ref()?;
         let screen = self.screen_rect();
         let max_item_w = menu
-            .items()
+            .actions()
             .iter()
-            .map(|item| item.len() as u16)
+            .map(|action| crate::ui::text::display_width_u16(&action.display_label()))
             .max()
             .unwrap_or(0);
         let menu_w = (max_item_w + 4).max(14).min(screen.width.max(1));
-        let menu_h = (menu.items().len() as u16 + 2).min(screen.height.max(1));
+        let menu_h = (menu.row_count() as u16 + 2).min(screen.height.max(1));
         let x = menu.x.min(screen.x + screen.width.saturating_sub(menu_w));
         let y = menu.y.min(screen.y + screen.height.saturating_sub(menu_h));
         Some(Rect::new(x, y, menu_w, menu_h))
@@ -1249,17 +1376,19 @@ impl AppState {
         let inner_y = menu_rect.y + 1;
         let inner_w = menu_rect.width.saturating_sub(2);
         let inner_h = menu_rect.height.saturating_sub(2);
-        let item_count = self
+        let row_count = self
             .context_menu
             .as_ref()
-            .map(|menu| menu.items().len() as u16)
+            .map(|menu| menu.row_count() as u16)
             .unwrap_or(0);
         if col >= inner_x
             && col < inner_x + inner_w
             && row >= inner_y
-            && row < inner_y + inner_h.min(item_count)
+            && row < inner_y + inner_h.min(row_count)
         {
-            Some((row - inner_y) as usize)
+            self.context_menu
+                .as_ref()?
+                .action_at_visual_row((row - inner_y) as usize)
         } else {
             None
         }
@@ -1884,6 +2013,7 @@ fn apply_scroll(scroll: &mut usize, delta: i16, max_scroll: usize) {
 mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
     use ratatui::layout::{Direction, Rect};
+    use std::time::{Duration, Instant};
 
     use super::super::{
         app_for_mouse_test, capture_snapshot, mouse, numbered_lines_bytes, root_layout_ratio,
@@ -1891,7 +2021,10 @@ mod tests {
     use super::*;
     use crate::app::input::modal::handle_context_menu_key;
     use crate::{
-        app::state::{ContextMenuKind, ContextMenuState, MenuListState, Mode, ViewLayout},
+        app::state::{
+            ContextMenuAction, ContextMenuKind, ContextMenuState, MenuListState, Mode,
+            PaneTitlePressState, PaneTransferSource, ViewLayout,
+        },
         detect::{Agent, AgentState},
         workspace::Workspace,
     };
@@ -1904,6 +2037,129 @@ mod tests {
             checkout_path: format!("/repo/worktree-{ws_idx}").into(),
             is_linked_worktree: ws_idx != 0,
         });
+    }
+
+    #[test]
+    fn pane_title_drag_requires_hold_and_one_cell_motion() {
+        let start = Instant::now();
+        let press = PaneTitlePressState {
+            source: PaneTransferSource {
+                workspace_id: "w1".into(),
+                tab_id: "w1:t1".into(),
+                pane_id: "w1:p1".into(),
+            },
+            started_at: start,
+            start_col: 10,
+            start_row: 4,
+        };
+        assert!(!pane_title_drag_ready(
+            &press,
+            start + Duration::from_millis(249),
+            11,
+            4
+        ));
+        assert!(!pane_title_drag_ready(
+            &press,
+            start + Duration::from_millis(250),
+            10,
+            4
+        ));
+        assert!(pane_title_drag_ready(
+            &press,
+            start + Duration::from_millis(250),
+            11,
+            4
+        ));
+    }
+
+    #[tokio::test]
+    async fn terminal_content_press_does_not_start_pane_transfer() {
+        let mut app = app_for_mouse_test();
+        let mut workspace = Workspace::test_new("content");
+        workspace.test_split(Direction::Horizontal);
+        app.state.workspaces = vec![workspace];
+        app.state.ensure_test_terminals();
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+        app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
+        crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 106, 24));
+        let info = app.state.view.pane_infos[0].clone();
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            info.inner_rect.x,
+            info.inner_rect.y,
+        ));
+
+        assert!(app.state.pane_title_press.is_none());
+        assert!(app.state.selection.is_some());
+    }
+
+    #[tokio::test]
+    async fn pane_title_drag_opens_transfer_after_both_thresholds() {
+        let mut app = app_for_mouse_test();
+        let mut workspace = Workspace::test_new("titles");
+        let source = workspace.tabs[0].root_pane;
+        let target = workspace.test_split(Direction::Horizontal);
+        app.state.workspaces = vec![workspace];
+        app.state.ensure_test_terminals();
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+        for (pane_id, label) in [(source, "source"), (target, "target")] {
+            let terminal_id = app.state.workspaces[0]
+                .pane_state(pane_id)
+                .expect("pane state")
+                .attached_terminal_id
+                .clone();
+            app.state
+                .terminals
+                .get_mut(&terminal_id)
+                .expect("terminal state")
+                .set_manual_label(label.into());
+        }
+        crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 106, 24));
+        let title = app
+            .state
+            .view
+            .pane_title_regions
+            .iter()
+            .find(|region| region.pane_id == source)
+            .expect("source title region")
+            .clone();
+        let target_info = app
+            .state
+            .view
+            .pane_infos
+            .iter()
+            .find(|info| info.id == target)
+            .expect("target pane")
+            .clone();
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            title.rect.x,
+            title.rect.y,
+        ));
+        let press = app.state.pane_title_press.as_mut().expect("title press");
+        press.started_at = Instant::now() - Duration::from_millis(250);
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Drag(MouseButton::Left),
+            target_info.inner_rect.x,
+            target_info.inner_rect.y,
+        ));
+
+        assert_eq!(app.state.mode, Mode::PaneLayout);
+        assert!(matches!(
+            app.state.pane_layout.as_ref().map(|layout| &layout.interaction),
+            Some(crate::app::state::PaneLayoutInteraction::Transfer(transfer))
+                if transfer.origin == crate::app::state::PaneTransferOrigin::TitleDrag
+                    && transfer.source.pane_id
+                        == app.public_pane_id(0, source).expect("source public id")
+        ));
+        assert!(app.state.pane_title_press.is_none());
     }
 
     #[tokio::test]
@@ -2370,9 +2626,9 @@ mod tests {
             } if pane_id == target && source_pane_id == source
         ));
         let swap_idx = menu
-            .items()
+            .actions()
             .iter()
-            .position(|item| *item == "Swap with focused pane")
+            .position(|action| *action == ContextMenuAction::SwapFocused)
             .expect("swap item");
         menu.list.highlighted = swap_idx;
 
@@ -2450,7 +2706,7 @@ mod tests {
                 ..
             } if pane_id == target && source_pane_id == source
         ));
-        assert!(menu.items().contains(&"Swap with focused pane"));
+        assert!(menu.actions().contains(&ContextMenuAction::SwapFocused));
     }
 
     #[tokio::test]
@@ -2587,7 +2843,17 @@ mod tests {
         app.state.mode = Mode::ContextMenu;
 
         let menu = app.state.context_menu_rect().unwrap();
-        app.handle_mouse(mouse(MouseEventKind::Moved, menu.x + 2, menu.y + 2));
+        let close_row = app
+            .state
+            .context_menu
+            .as_ref()
+            .and_then(|menu| menu.visual_row_for_action(1))
+            .expect("close action visual row");
+        app.handle_mouse(mouse(
+            MouseEventKind::Moved,
+            menu.x + 2,
+            menu.y + 1 + close_row as u16,
+        ));
 
         assert_eq!(app.state.context_menu.unwrap().list.highlighted, 1);
     }
@@ -2920,11 +3186,23 @@ mod tests {
         });
         app.state.mode = Mode::ContextMenu;
 
+        let close_visual_row = app
+            .state
+            .context_menu
+            .as_ref()
+            .and_then(|menu| {
+                let close_idx = menu
+                    .actions()
+                    .iter()
+                    .position(|action| *action == ContextMenuAction::Close)?;
+                menu.visual_row_for_action(close_idx)
+            })
+            .expect("close visual row");
         let menu = app.state.context_menu_rect().unwrap();
         app.handle_mouse(mouse(
             MouseEventKind::Down(MouseButton::Left),
             menu.x + 2,
-            menu.y + 2,
+            menu.y + 1 + close_visual_row as u16,
         ));
 
         assert_eq!(app.state.workspaces.len(), 1);
@@ -2966,6 +3244,7 @@ mod tests {
                 pane_id,
                 source_pane_id: None,
                 has_manual_label: false,
+                can_rearrange: false,
             },
             x: 2,
             y: 2,
@@ -3522,10 +3801,22 @@ mod tests {
             .state
             .context_menu_rect()
             .expect("tab context menu rect");
+        let close_visual_row = app
+            .state
+            .context_menu
+            .as_ref()
+            .and_then(|menu| {
+                let close_idx = menu
+                    .actions()
+                    .iter()
+                    .position(|action| *action == ContextMenuAction::Close)?;
+                menu.visual_row_for_action(close_idx)
+            })
+            .expect("close visual row");
         app.handle_mouse(mouse(
             MouseEventKind::Down(MouseButton::Left),
             menu.x + 2,
-            menu.y + 3,
+            menu.y + 1 + close_visual_row as u16,
         ));
 
         assert_eq!(app.state.workspaces[0].tabs.len(), 1);
@@ -3569,10 +3860,13 @@ mod tests {
 
         let menu_state = app.state.context_menu.as_ref().expect("pane context menu");
         let close_idx = menu_state
-            .items()
+            .actions()
             .iter()
-            .position(|item| *item == "Close pane")
+            .position(|action| *action == ContextMenuAction::ClosePane)
             .expect("close pane menu item");
+        let close_row = menu_state
+            .visual_row_for_action(close_idx)
+            .expect("close pane visual row");
         let menu = app
             .state
             .context_menu_rect()
@@ -3580,7 +3874,7 @@ mod tests {
         app.handle_mouse(mouse(
             MouseEventKind::Down(MouseButton::Left),
             menu.x + 2,
-            menu.y + 1 + close_idx as u16,
+            menu.y + 1 + close_row as u16,
         ));
 
         assert_eq!(app.state.workspaces[0].tabs[0].layout.pane_count(), 1);
@@ -3622,10 +3916,13 @@ mod tests {
 
         let menu_state = app.state.context_menu.as_ref().expect("pane context menu");
         let close_idx = menu_state
-            .items()
+            .actions()
             .iter()
-            .position(|item| *item == "Close pane")
+            .position(|action| *action == ContextMenuAction::ClosePane)
             .expect("close pane menu item");
+        let close_row = menu_state
+            .visual_row_for_action(close_idx)
+            .expect("close pane visual row");
         let menu = app
             .state
             .context_menu_rect()
@@ -3633,7 +3930,7 @@ mod tests {
         app.handle_mouse(mouse(
             MouseEventKind::Down(MouseButton::Left),
             menu.x + 2,
-            menu.y + 1 + close_idx as u16,
+            menu.y + 1 + close_row as u16,
         ));
 
         assert_eq!(app.state.selected, 0);
