@@ -12,13 +12,14 @@ The change crosses detection, API schema, CLI parsing, integration configuration
 - Provide screen-manifest fallback when the optional integration is absent or stale.
 - Expose a cross-platform `qwen` integration target through CLI, API, status, and settings recommendations.
 - Use official Qwen Code hooks to report session identity and authoritative lifecycle state.
+- Use Qwen Code's session id to resume saved conversations after a cold Herdr restore.
 - Make install, reinstall, and uninstall idempotent while preserving unrelated Qwen settings and hooks.
 
 **Non-Goals:**
 
 - Install or update Qwen Code itself.
 - Modify project-local `.qwen/settings.json` files.
-- Add native Qwen conversation resume until its stable interactive resume command and compatibility contract are verified separately.
+- Select or resume a Qwen conversation when no integration-reported session id is available.
 - Treat Qwen model providers used by other clients as Qwen Code processes.
 
 ## Decisions
@@ -51,6 +52,12 @@ The source/agent pair `herdr:qwen` / `qwen` will be marked as full-lifecycle aut
 
 Alternative considered: session identity only with screen-derived lifecycle. Rejected for the first implementation because Qwen exposes direct permission, stop, failure, and session-end events that are more precise than terminal text. Screen detection remains a fallback and a visible-blocker safety signal.
 
+### Resume the exact integration-reported Qwen session
+
+Qwen Code exposes `qwen --resume <sessionId>` for non-interactive selection of a saved conversation. Herdr will accept id references only from the exact official source/agent pair `herdr:qwen` / `qwen` and will build the resume argv as separate values so the session id is never interpreted as shell syntax.
+
+The existing version 1 hook already reports Qwen's stable `session_id`, so enabling native restore does not require an integration asset change or reinstall. `qwen --continue` was considered but rejected because it selects the most recent project session rather than the exact session bound to the restored pane.
+
 ### Treat hook-file and hook-registration health as one integration
 
 Status will use the version marker in the installed hook file and also validate that all expected Herdr hook registrations are present in Qwen settings. A current script with missing configuration is reported as outdated so reinstall can repair it.
@@ -69,10 +76,11 @@ Alternative considered: check the script version only. Rejected because Qwen wil
 
 1. Ship the additive agent enum, manifest, API enum variant, hook assets, and integration plumbing in one binary.
 2. Existing users opt in with `herdr integration install qwen`; no existing configuration is migrated automatically.
-3. Reinstall repairs Herdr-owned entries and leaves other Qwen configuration intact.
-4. Rollback with `herdr integration uninstall qwen`, which removes only Herdr-owned entries and the hook file.
-5. An older Herdr binary can continue running after the new binary is placed on disk; activate the deployed server through live handoff where supported so pane processes remain alive.
+3. Existing version 1 Qwen integrations begin supporting native restore after the Herdr binary update without reinstalling the hook.
+4. Reinstall repairs Herdr-owned entries and leaves other Qwen configuration intact.
+5. Rollback with `herdr integration uninstall qwen`, which removes only Herdr-owned entries and the hook file.
+6. An older Herdr binary can continue running after the new binary is placed on disk; activate the deployed server through live handoff where supported so pane processes remain alive.
 
 ## Open Questions
 
-None for this scope. Native Qwen session resume is intentionally deferred.
+None for this scope.

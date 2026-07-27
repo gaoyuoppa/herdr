@@ -22,3 +22,8 @@
 - [x] 4.1 Run formatting, focused detection/integration tests, schema checks, documentation checks, and Linux cross-target test compilation
 - [x] 4.2 Produce and inspect a clean Linux x86_64 static release binary
 - [x] 4.3 Back up the remote executable, deploy atomically, perform live handoff, and verify the remote service and pre-existing panes remain available
+
+## 5. Native Session Restore
+
+- [x] 5.1 Accept official Qwen session ids, construct `qwen --resume <id>` restore plans, and cover source, ref-kind, and argv safety contracts
+- [x] 5.2 Document Qwen native restore in synchronized next-release docs and run focused implementation and documentation checks
