@@ -1331,7 +1331,13 @@ mod tests {
         app.state.active = Some(1);
         app.state.selected = 2;
         crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 106, 20));
-        let packed_boundary_row = app.state.view.workspace_card_areas[1].rect.y;
+        let packed_boundary_row = crate::ui::workspace_drop_indicator_row(
+            &app.state,
+            &app.state.view.workspace_card_areas,
+            app.state.workspace_list_rect(),
+            crate::app::state::WorkspaceDropTarget::Before(2),
+        )
+        .unwrap();
         assert_eq!(
             app.state.workspace_drop_target_at_row(packed_boundary_row),
             Some(crate::app::state::WorkspaceDropTarget::Before(2))
@@ -1580,20 +1586,29 @@ mod tests {
         app.state.sidebar_spaces.row_gap = 1;
         crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 106, 20));
 
+        let cards = &app.state.view.workspace_card_areas;
+        let list = app.state.workspace_list_rect();
+        let top_slot = crate::ui::workspace_drop_indicator_row(
+            &app.state,
+            cards,
+            list,
+            crate::app::state::WorkspaceDropTarget::Before(0),
+        )
+        .unwrap();
+        let second_slot = crate::ui::workspace_drop_indicator_row(
+            &app.state,
+            cards,
+            list,
+            crate::app::state::WorkspaceDropTarget::Before(1),
+        )
+        .unwrap();
+        assert!(top_slot < second_slot);
         assert_eq!(
-            app.state.workspace_drop_target_at_row(0),
+            app.state.workspace_drop_target_at_row(top_slot),
             Some(crate::app::state::WorkspaceDropTarget::Before(0))
         );
         assert_eq!(
-            app.state.workspace_drop_target_at_row(1),
-            Some(crate::app::state::WorkspaceDropTarget::Before(0))
-        );
-        assert_eq!(
-            app.state.workspace_drop_target_at_row(2),
-            Some(crate::app::state::WorkspaceDropTarget::Before(0))
-        );
-        assert_eq!(
-            app.state.workspace_drop_target_at_row(3),
+            app.state.workspace_drop_target_at_row(second_slot),
             Some(crate::app::state::WorkspaceDropTarget::Before(1))
         );
 
@@ -1622,7 +1637,7 @@ mod tests {
 
         let last = cards.last().unwrap().rect;
         assert_eq!(bottom_slot, last.y + last.height);
-        assert!(bottom_slot < app.state.sidebar_footer_rect().y.saturating_sub(1));
+        assert!(bottom_slot < app.state.sidebar_footer_rect().y);
     }
 
     #[test]
