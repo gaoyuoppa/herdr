@@ -281,9 +281,6 @@ pub struct HeadlessServer {
     shutting_down: bool,
     /// Flag set while exporting live PTYs to a replacement server.
     handoff_in_progress: bool,
-    /// Imported panes get one app-safe resize nudge after the first client attaches.
-    #[cfg(unix)]
-    pending_handoff_repaint_nudge: bool,
     /// Flag set by Ctrl+C or `server stop` signal.
     should_quit: Arc<AtomicBool>,
     /// Channel for receiving server events from client connection threads.
@@ -468,8 +465,6 @@ impl HeadlessServer {
             effective_size: (MIN_COLS, MIN_ROWS),
             shutting_down: false,
             handoff_in_progress: false,
-            #[cfg(unix)]
-            pending_handoff_repaint_nudge: false,
             should_quit,
             server_event_rx,
             server_event_tx,
@@ -1355,13 +1350,7 @@ impl HeadlessServer {
 
     #[cfg(unix)]
     fn nudge_handoff_panes_on_first_client_attach(&mut self) {
-        if !self.pending_handoff_repaint_nudge {
-            return;
-        }
-        self.pending_handoff_repaint_nudge = false;
-        self.app
-            .terminal_runtimes
-            .nudge_child_redraw_after_handoff();
+        self.app.terminal_runtimes.nudge_handoff_runtimes_once();
     }
 
     #[cfg(not(unix))]
@@ -4529,7 +4518,6 @@ fn run_handoff_import_server(socket_path: &Path, token: &str) -> io::Result<()> 
         crate::server::handoff::wait_committed(&mut received.stream)?;
         server.app.assume_handoff_ownership();
         server.app.unpause_handoff_readers();
-        server.pending_handoff_repaint_nudge = true;
         if let Err(err) = crate::server::handoff::report_owned(&mut received.stream) {
             warn!(err = %err, "failed to report handoff ownership; continuing as owner");
         }
@@ -4659,8 +4647,6 @@ mod tests {
             effective_size: (MIN_COLS, MIN_ROWS),
             shutting_down: false,
             handoff_in_progress: false,
-            #[cfg(unix)]
-            pending_handoff_repaint_nudge: false,
             #[cfg(unix)]
             should_quit: Arc::new(AtomicBool::new(false)),
             #[cfg(windows)]

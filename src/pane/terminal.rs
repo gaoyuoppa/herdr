@@ -1279,12 +1279,12 @@ impl GhosttyPaneTerminal {
             .unwrap_or_default()
     }
 
-    pub fn seed_history_ansi(&self, ansi: &str) {
+    pub fn seed_history_ansi(&self, ansi: &str) -> bool {
         if ansi.is_empty() {
-            return;
+            return false;
         }
         let Ok(mut core) = self.core.lock() else {
-            return;
+            return false;
         };
         core.terminal.write(ansi.as_bytes());
         #[cfg(windows)]
@@ -1292,6 +1292,7 @@ impl GhosttyPaneTerminal {
         if let Ok(mut key_encoder) = self.key_encoder.lock() {
             key_encoder.set_from_terminal(&core.terminal);
         }
+        true
     }
 
     #[cfg(unix)]
@@ -4646,6 +4647,16 @@ mod tests {
 
         assert!(result.request_render);
         assert_eq!(result.render_delay, Some(KITTY_GRAPHICS_REDRAW_SETTLE));
+    }
+
+    #[test]
+    fn seed_history_ansi_reports_only_usable_replay() {
+        let (tx, _rx) = mpsc::channel(4);
+        let terminal = crate::ghostty::Terminal::new(20, 5, 100).expect("terminal");
+        let pane = GhosttyPaneTerminal::new(terminal, tx).expect("pane terminal");
+
+        assert!(!pane.seed_history_ansi(""));
+        assert!(pane.seed_history_ansi("restored history"));
     }
 
     #[test]

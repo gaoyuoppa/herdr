@@ -242,6 +242,11 @@ impl TerminalRuntime {
         self.0.nudge_child_redraw_after_handoff();
     }
 
+    #[cfg(unix)]
+    pub fn take_handoff_repaint_needed(&self) -> bool {
+        self.0.take_handoff_repaint_needed()
+    }
+
     pub fn scroll_up(&self, lines: usize) {
         self.0.scroll_up(lines);
     }
@@ -541,5 +546,14 @@ impl TerminalRuntime {
             channel_capacity,
         );
         (Self(runtime), rx)
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn test_with_handoff_repaint_needed(
+        needed: bool,
+    ) -> (Self, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let (runtime, nudge_count) =
+            crate::pane::PaneRuntime::test_with_handoff_repaint_needed(needed);
+        (Self(runtime), nudge_count)
     }
 }
