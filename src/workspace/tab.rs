@@ -487,6 +487,22 @@ impl Tab {
         })
     }
 
+    pub(crate) fn restore_moved_pane(&mut self, moved: MovedPane) -> Result<(), MovedPane> {
+        if self.panes.contains_key(&moved.pane_id) {
+            return Err(moved);
+        }
+        self.panes.insert(moved.pane_id, moved.pane_state);
+        Ok(())
+    }
+
+    pub(crate) fn take_moved_pane_state(&mut self, pane_id: PaneId) -> Option<MovedPane> {
+        let pane_state = self.panes.remove(&pane_id)?;
+        Some(MovedPane {
+            pane_id,
+            pane_state,
+        })
+    }
+
     pub(crate) fn insert_existing_pane(
         &mut self,
         target_pane_id: PaneId,
