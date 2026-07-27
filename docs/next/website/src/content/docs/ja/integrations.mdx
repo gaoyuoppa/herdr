@@ -1,6 +1,6 @@
 ---
 title: インテグレーション
-description: Pi、OMP、Claude Code、Codex、GitHub Copilot CLI、Devin CLI、Droid、Kimi Code CLI、OpenCode、Kilo Code CLI、Hermes Agent、Qoder CLI、Cursor Agent CLI、MastraCode、Antigravity CLI、Grok CLI 向けの Herdr インテグレーションをインストールします。
+description: Pi、OMP、Claude Code、Codex、Qwen Code、GitHub Copilot CLI、Devin CLI、Droid、Kimi Code CLI、OpenCode、Kilo Code CLI、Hermes Agent、Qoder CLI、Cursor Agent CLI、MastraCode、Antigravity CLI、Grok CLI 向けの Herdr インテグレーションをインストールします。
 ---
 
 Herdr は対応エージェントを自動的に検出します。公式インテグレーションは、復元のためのネイティブセッション識別、ライフサイクル状態の報告、またはその両方を追加できます。
@@ -24,6 +24,7 @@ herdr integration install opencode
 herdr integration install kilo
 herdr integration install hermes
 herdr integration install mastracode
+herdr integration install qwen
 herdr integration install qodercli
 herdr integration install cursor
 herdr integration install antigravity-cli
@@ -45,6 +46,7 @@ herdr integration uninstall opencode
 herdr integration uninstall kilo
 herdr integration uninstall hermes
 herdr integration uninstall mastracode
+herdr integration uninstall qwen
 herdr integration uninstall qodercli
 herdr integration uninstall cursor
 herdr integration uninstall antigravity-cli
@@ -57,7 +59,7 @@ Herdr はインテグレーションを 2 つの異なる方法で使います:
 
 | インテグレーションの種類 | エージェント | 効果 |
 | --- | --- | --- |
-| ライフサイクル権威 | Pi、OMP、Kimi Code CLI、OpenCode、Kilo Code CLI、MastraCode | インストールされ、そのペインについて能動的に報告している間は、フックまたはプラグインのイベントが `idle`、`working`、`blocked` を決定します。同じライフサイクル権威に対して、Herdr はスクリーンマニフェストのフォールバックを併用しません。 |
+| ライフサイクル権威 | Pi、OMP、Qwen Code、Kimi Code CLI、OpenCode、Kilo Code CLI、MastraCode | インストールされ、そのペインについて能動的に報告している間は、フックまたはプラグインのイベントが `idle`、`working`、`blocked` を決定します。同じライフサイクル権威に対して、Herdr はスクリーンマニフェストのフォールバックを併用しません。 |
 | セッション識別 | Claude Code、Codex、GitHub Copilot CLI、Devin CLI、Droid、Qoder CLI、Cursor Agent CLI、Hermes Agent、Antigravity CLI、Grok CLI | インテグレーションは復元用のネイティブセッション参照を報告します。状態は引き続き Herdr のスクリーンマニフェスト検出から得られます。 |
 
 カスタムインテグレーションも、ネイティブのターミナル UI では見えない状態を定義する場合に状態を報告できます。Herdr への組み込みや、認識済みのエージェント実行ファイルは必要ありません。
@@ -242,6 +244,20 @@ herdr integration install hermes
 Herdr は `~/.hermes/plugins/herdr-agent-state/` を書き込み、`~/.hermes/config.yaml` で `herdr-agent-state` を有効にします。Hermes の設定ディレクトリはあらかじめ存在している必要があります。プラグインを読み込ませるため、インストール後に Hermes を再起動してください。アンインストールはプラグインディレクトリを削除し、`plugins.enabled` から `herdr-agent-state` を削除します。
 
 このプラグインは、Hermes が Herdr のペイン内で動いている間、resume 可能なセッション id を報告します。Herdr は `working`、`idle`、`blocked` にスクリーンマニフェスト検出を使い、報告されたセッション id で `hermes --resume <id>` としてペインを resume できます。
+
+## Qwen Code
+
+Qwen Code フックをインストールします:
+
+```bash
+herdr integration install qwen
+```
+
+このフックは、Qwen Code のセッション、プロンプト、ツール、許可、通知、コンパクション、停止、解放の各イベントを、権威ある `working`、`blocked`、`idle` 状態へマッピングします。Qwen が Herdr ペイン内で動作しフックが有効な間は、ライフサイクル状態はフックから得られます。フックがない場合は Qwen のスクリーンマニフェストへフォールバックします。
+
+Herdr はデフォルトで `~/.qwen` を使い、`QWEN_HOME` が設定されていればそちらを使います。Qwen の設定ディレクトリはあらかじめ存在している必要があります。インストールは `hooks/herdr-agent-state.sh`（Windows では `.ps1`）を書き込み、`settings.json` のトップレベル `hooks` オブジェクトに Herdr 所有のエントリだけを追加します。既存のモデル、MCP サーバー、設定、サードパーティーフックは保持されます。再インストールは重複させずに Herdr エントリを修復し、アンインストールは Herdr エントリとスクリプトだけを削除します。
+
+フックは Qwen のセッション id をライブペインの識別情報として記録します。安定した Qwen の再開コマンドをまだ接続していないため、Herdr は現在この id をネイティブセッション復元には使いません。
 
 ## Qoder CLI
 
