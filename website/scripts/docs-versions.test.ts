@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { normalizeVersion, sortVersionsNewestFirst } from './docs-versions.mjs';
+import {
+  buffersEqualModuloCheckoutLineEndings,
+  normalizeVersion,
+  sortVersionsNewestFirst,
+} from './docs-versions.mjs';
 
 describe('normalizeVersion', () => {
   test.each([
@@ -29,5 +33,25 @@ describe('sortVersionsNewestFirst', () => {
       '0.6.10',
       '0.5.12',
     ]);
+  });
+});
+
+describe('buffersEqualModuloCheckoutLineEndings', () => {
+  test('accepts CRLF working-tree text that matches an LF git blob', () => {
+    expect(
+      buffersEqualModuloCheckoutLineEndings(
+        Buffer.from('first\r\nsecond\r\n'),
+        Buffer.from('first\nsecond\n'),
+      ),
+    ).toBe(true);
+  });
+
+  test('still rejects semantic content changes', () => {
+    expect(
+      buffersEqualModuloCheckoutLineEndings(
+        Buffer.from('first\r\nchanged\r\n'),
+        Buffer.from('first\nsecond\n'),
+      ),
+    ).toBe(false);
   });
 });

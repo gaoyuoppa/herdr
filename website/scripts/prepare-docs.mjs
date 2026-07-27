@@ -184,6 +184,7 @@ async function collectDocsScope(sourceDir, excludedDirectories = new Set()) {
 }
 
 export function rewritePreviewDocContent(content, relativePath = '') {
+  content = content.replace(/\r\n?/g, '\n');
   const rewritten = rewriteRelativeDocPaths(
     content.replaceAll('/docs/', '/docs/preview/'),
     1,
@@ -196,6 +197,7 @@ export function rewritePreviewDocContent(content, relativePath = '') {
 }
 
 export function rewriteVersionDocContent(content, { version, tag, sourceRoot, relativePath }) {
+  content = content.replace(/\r\n?/g, '\n');
   const taggedContent = content
     .replaceAll('/docs/', `/docs/${version}/`)
     .replaceAll(

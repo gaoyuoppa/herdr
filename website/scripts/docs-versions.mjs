@@ -31,6 +31,14 @@ export function sortVersionsNewestFirst(versions) {
   });
 }
 
+export function buffersEqualModuloCheckoutLineEndings(left, right) {
+  const normalize = (content) =>
+    content.includes(13)
+      ? Buffer.from(content.toString('utf8').replaceAll('\r\n', '\n'), 'utf8')
+      : content;
+  return normalize(left).equals(normalize(right));
+}
+
 function git(args, options = {}) {
   return execFileSync('git', args, {
     cwd: repoRoot,
@@ -180,7 +188,7 @@ export async function checkVersions() {
       const actualContent = await readFile(resolve(snapshotRoot, relativePath));
       const taggedPath = `${sourceRoot}/${relativePath.split('\\').join('/')}`;
       const taggedContent = git(['show', `${entry.tag}:${taggedPath}`], { binary: true });
-      if (!actualContent.equals(taggedContent)) {
+      if (!buffersEqualModuloCheckoutLineEndings(actualContent, taggedContent)) {
         throw new Error(`${entry.version}/${relativePath} differs from ${entry.tag}:${sourceRoot}`);
       }
     }
@@ -196,7 +204,7 @@ export async function checkVersions() {
     if (gitPathExists(entry.tag, referenceSource)) {
       const actualReference = await readFile(referenceSnapshot);
       const taggedReference = git(['show', `${entry.tag}:${referenceSource}`], { binary: true });
-      if (!actualReference.equals(taggedReference)) {
+      if (!buffersEqualModuloCheckoutLineEndings(actualReference, taggedReference)) {
         throw new Error(`${entry.version} config reference differs from ${entry.tag}:${referenceSource}`);
       }
     } else {
