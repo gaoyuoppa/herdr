@@ -2,7 +2,7 @@ mod tokens;
 
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
@@ -232,16 +232,9 @@ fn workspace_row_height_in_body(
     workspace_row_height(app, workspace, indented).min(body_height)
 }
 
-fn workspace_entry_gap(
-    app: &AppState,
-    entries: &[WorkspaceListEntry],
-    entry_idx: usize,
-    indented: bool,
-) -> u16 {
-    if entry_idx + 1 < entries.len()
-        && !(indented && next_entry_is_indented_workspace(entries, entry_idx))
-    {
-        app.sidebar_spaces.row_gap
+fn workspace_entry_gap(app: &AppState, entries: &[WorkspaceListEntry], entry_idx: usize) -> u16 {
+    if entry_idx + 1 < entries.len() {
+        1u16.saturating_add(app.sidebar_spaces.row_gap)
     } else {
         0
     }
@@ -255,6 +248,29 @@ fn workspace_attention_priority(state: AgentState, seen: bool) -> u8 {
         (AgentState::Idle, true) => 1,
         (AgentState::Unknown, _) => 0,
     }
+}
+
+fn workspace_stripe_background(palette: &Palette, entry_idx: usize) -> Color {
+    if entry_idx.is_multiple_of(2) {
+        return palette.panel_bg;
+    }
+    match (palette.panel_bg, palette.surface0) {
+        (Color::Rgb(base_r, base_g, base_b), Color::Rgb(alt_r, alt_g, alt_b))
+            if (base_r, base_g, base_b) != (alt_r, alt_g, alt_b) =>
+        {
+            Color::Rgb(
+                blend_channel(base_r, alt_r),
+                blend_channel(base_g, alt_g),
+                blend_channel(base_b, alt_b),
+            )
+        }
+        (base, alternate) if base != alternate => alternate,
+        _ => palette.surface1,
+    }
+}
+
+fn blend_channel(base: u8, alternate: u8) -> u8 {
+    ((u16::from(base) * 3 + u16::from(alternate)) / 4) as u8
 }
 
 fn space_aggregate_state(app: &AppState, key: &str) -> (AgentState, bool) {
@@ -478,7 +494,7 @@ fn workspace_list_visible_count(app: &AppState, area: Rect, scroll: usize) -> us
                 };
                 (
                     workspace_row_height_in_body(app, ws, *indented, body.height),
-                    workspace_entry_gap(app, &entries, entry_idx, *indented),
+                    workspace_entry_gap(app, &entries, entry_idx),
                 )
             }
         };
@@ -502,7 +518,7 @@ fn workspace_list_bottom_start(app: &AppState, area: Rect) -> usize {
         let Some(workspace) = app.workspaces.get(*ws_idx) else {
             continue;
         };
-        let gap = workspace_entry_gap(app, &entries, entry_idx, *indented);
+        let gap = workspace_entry_gap(app, &entries, entry_idx);
         let needed = workspace_row_height_in_body(app, workspace, *indented, body.height)
             .saturating_add(gap);
         if used_rows.saturating_add(needed) > body.height {
@@ -696,12 +712,13 @@ pub(crate) fn compute_workspace_list_areas(
                     continue;
                 };
                 let row_height = workspace_row_height_in_body(app, ws, *indented, body.height);
-                let gap = workspace_entry_gap(app, &entries, entry_idx, *indented);
+                let gap = workspace_entry_gap(app, &entries, entry_idx);
                 if row_y.saturating_add(row_height) > body_bottom {
                     break;
                 }
                 cards.push(crate::app::state::WorkspaceCardArea {
                     ws_idx: *ws_idx,
+                    entry_idx,
                     rect: Rect::new(body.x, row_y, body.width, row_height),
                     indented: *indented,
                 });
@@ -1236,25 +1253,24 @@ fn render_workspace_list(
         let selected = i == app.selected && is_navigating;
         let is_active = Some(i) == app.active;
         let is_dragged = dragged_ws_idx == Some(i);
-        let highlighted = selected || is_active || is_dragged;
         let (agg_state, agg_seen) = ws.aggregate_state(&app.terminals);
 
-        if highlighted {
-            let bg = if selected {
-                p.surface0
-            } else if is_dragged {
-                p.surface1
-            } else {
-                p.surface_dim
-            };
-            let buf = frame.buffer_mut();
-            for y in row_y..row_y + row_height {
-                if y >= list_bottom {
-                    break;
-                }
-                for x in card.rect.x..card.rect.x + card.rect.width {
-                    buf[(x, y)].set_style(Style::default().bg(bg));
-                }
+        let bg = if selected {
+            p.surface0
+        } else if is_dragged {
+            p.surface1
+        } else if is_active {
+            p.surface_dim
+        } else {
+            workspace_stripe_background(p, card.entry_idx)
+        };
+        let buf = frame.buffer_mut();
+        for y in row_y..row_y + row_height {
+            if y >= list_bottom {
+                break;
+            }
+            for x in card.rect.x..card.rect.x + card.rect.width {
+                buf[(x, y)].set_style(Style::default().bg(bg));
             }
         }
 
@@ -1370,6 +1386,29 @@ fn render_workspace_list(
                 )),
                 workspace_group_chevron_rect(card),
             );
+        }
+
+        let separator_y = card.rect.y.saturating_add(card.rect.height);
+        if card.entry_idx + 1 < entries.len() && separator_y < list_bottom {
+            let separator_right = scrollbar_rect
+                .map(|rect| rect.x)
+                .unwrap_or(card.rect.x.saturating_add(card.rect.width));
+            let buf = frame.buffer_mut();
+            for x in card.rect.x..separator_right {
+                buf[(x, separator_y)].set_symbol("─");
+                buf[(x, separator_y)].set_style(Style::default().fg(p.surface1).bg(p.panel_bg));
+            }
+            if matches!(
+                entries.get(card.entry_idx + 1),
+                Some(WorkspaceListEntry::Workspace { indented: true, .. })
+            ) {
+                let connector_x = card.rect.x.saturating_add(3);
+                if connector_x < separator_right {
+                    buf[(connector_x, separator_y)].set_symbol("┼");
+                    buf[(connector_x, separator_y)]
+                        .set_style(Style::default().fg(p.overlay0).bg(p.panel_bg));
+                }
+            }
         }
     }
 
@@ -1725,7 +1764,116 @@ rows = [[{ token = "workspace", bold = false }, { token = "agent", dim = false }
         assert!(!inactive
             .add_modifier
             .intersects(Modifier::BOLD | Modifier::DIM));
-        assert_eq!(inactive.bg, Some(ratatui::style::Color::Reset));
+        assert_eq!(
+            inactive.bg,
+            Some(workspace_stripe_background(&app.palette, 1))
+        );
+    }
+
+    #[test]
+    fn workspace_zebra_stripes_stay_bound_to_logical_entries_while_scrolling() {
+        let mut app = crate::app::state::AppState::test_new();
+        app.workspaces = ["zero", "one", "two", "three", "four"]
+            .into_iter()
+            .map(Workspace::test_new)
+            .collect();
+        app.active = None;
+        app.mode = Mode::Terminal;
+        app.sidebar_section_split = 0.9;
+        app.sidebar_spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
+        app.sidebar_spaces.row_gap = 0;
+        app.workspace_scroll = 1;
+
+        let area = Rect::new(0, 0, 30, 10);
+        app.view.workspace_card_areas = compute_workspace_card_areas(&app, area);
+        let first_visible = app.view.workspace_card_areas[0];
+        assert_eq!(first_visible.ws_idx, 1);
+        assert_eq!(first_visible.entry_idx, 1);
+
+        let list_area = workspace_list_rect(area, app.sidebar_section_split);
+        let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
+        terminal
+            .draw(|frame| {
+                render_workspace_list(
+                    &app,
+                    &TerminalRuntimeRegistry::new(),
+                    frame,
+                    list_area,
+                    false,
+                )
+            })
+            .unwrap();
+
+        assert_eq!(
+            terminal.backend().buffer()[(first_visible.rect.x, first_visible.rect.y)]
+                .style()
+                .bg,
+            Some(workspace_stripe_background(&app.palette, 1))
+        );
+    }
+
+    #[test]
+    fn workspace_state_backgrounds_override_stripes_and_separator_is_visible() {
+        let mut app = crate::app::state::AppState::test_new();
+        app.workspaces = ["active", "selected", "dragged", "normal"]
+            .into_iter()
+            .map(Workspace::test_new)
+            .collect();
+        app.active = Some(0);
+        app.selected = 1;
+        app.mode = Mode::Navigate;
+        app.sidebar_section_split = 0.9;
+        app.sidebar_spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
+        app.sidebar_spaces.row_gap = 0;
+        app.drag = Some(crate::app::state::DragState {
+            target: crate::app::state::DragTarget::WorkspaceReorder {
+                source_ws_idx: 2,
+                drop_target: None,
+            },
+        });
+
+        let area = Rect::new(0, 0, 30, 14);
+        app.view.workspace_card_areas = compute_workspace_card_areas(&app, area);
+        assert_eq!(app.view.workspace_card_areas.len(), 4);
+        let list_area = workspace_list_rect(area, app.sidebar_section_split);
+        let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
+        terminal
+            .draw(|frame| {
+                render_workspace_list(
+                    &app,
+                    &TerminalRuntimeRegistry::new(),
+                    frame,
+                    list_area,
+                    true,
+                )
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let backgrounds = app
+            .view
+            .workspace_card_areas
+            .iter()
+            .map(|card| buffer[(card.rect.x, card.rect.y)].style().bg)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            backgrounds,
+            vec![
+                Some(app.palette.surface_dim),
+                Some(app.palette.surface0),
+                Some(app.palette.surface1),
+                Some(workspace_stripe_background(&app.palette, 3)),
+            ]
+        );
+
+        let separator_y = app.view.workspace_card_areas[0]
+            .rect
+            .y
+            .saturating_add(app.view.workspace_card_areas[0].rect.height);
+        assert_eq!(
+            buffer[(app.view.workspace_card_areas[0].rect.x, separator_y)].symbol(),
+            "─"
+        );
     }
 
     #[test]
@@ -2365,6 +2513,7 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
         app.mode = Mode::Terminal;
         app.view.workspace_card_areas = vec![crate::app::state::WorkspaceCardArea {
             ws_idx: 0,
+            entry_idx: 0,
             rect: Rect::new(0, 1, 15, 2),
             indented: false,
         }];
@@ -2463,7 +2612,7 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
         ];
         app.sidebar_spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
         app.sidebar_spaces.row_gap = 0;
-        let area = Rect::new(0, 0, 30, 10);
+        let area = Rect::new(0, 0, 30, 12);
         app.view.workspace_card_areas = compute_workspace_card_areas(&app, area);
         assert_eq!(app.view.workspace_card_areas.len(), 2);
         let list_area = workspace_list_rect(area, app.sidebar_section_split);
@@ -2504,11 +2653,11 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
         assert!(!cards[0].indented);
         assert_eq!(cards[1].ws_idx, 1);
         assert!(cards[1].indented);
-        assert_eq!(cards[1].rect.y, cards[0].rect.y + cards[0].rect.height + 1);
+        assert_eq!(cards[1].rect.y, cards[0].rect.y + cards[0].rect.height + 2);
     }
 
     #[test]
-    fn space_row_gap_preserves_compact_worktree_children() {
+    fn space_row_gap_applies_after_mandatory_workspace_separators() {
         let mut app = AppState::test_new();
         app.workspaces = vec![
             workspace_with_worktree_space("main", Some("repo-key"), "/repo/herdr"),
@@ -2519,31 +2668,31 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
         app.sidebar_spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
         app.sidebar_spaces.row_gap = 2;
 
-        let (spacious, _) = compute_workspace_list_areas(&app, Rect::new(0, 0, 30, 30));
+        let (spacious, _) = compute_workspace_list_areas(&app, Rect::new(0, 0, 30, 34));
         assert_eq!(
             spacious[1].rect.y,
-            spacious[0].rect.y + spacious[0].rect.height + 2
+            spacious[0].rect.y + spacious[0].rect.height + 3
         );
         assert_eq!(
             spacious[2].rect.y,
-            spacious[1].rect.y + spacious[1].rect.height
+            spacious[1].rect.y + spacious[1].rect.height + 3
         );
         assert_eq!(
             spacious[3].rect.y,
-            spacious[2].rect.y + spacious[2].rect.height + 2
+            spacious[2].rect.y + spacious[2].rect.height + 3
         );
         let spacious_metrics = workspace_list_scroll_metrics(&app, Rect::new(0, 0, 30, 7));
-        assert_eq!(spacious_metrics.viewport_rows, 2);
-        assert_eq!(spacious_metrics.max_offset_from_bottom, 2);
+        assert_eq!(spacious_metrics.viewport_rows, 1);
+        assert_eq!(spacious_metrics.max_offset_from_bottom, 3);
 
         app.sidebar_spaces.row_gap = 0;
         let (packed, _) = compute_workspace_list_areas(&app, Rect::new(0, 0, 30, 30));
         assert!(packed
             .windows(2)
-            .all(|pair| pair[1].rect.y == pair[0].rect.y + pair[0].rect.height));
+            .all(|pair| pair[1].rect.y == pair[0].rect.y + pair[0].rect.height + 1));
         let packed_metrics = workspace_list_scroll_metrics(&app, Rect::new(0, 0, 30, 7));
-        assert_eq!(packed_metrics.viewport_rows, 4);
-        assert_eq!(packed_metrics.max_offset_from_bottom, 0);
+        assert_eq!(packed_metrics.viewport_rows, 2);
+        assert_eq!(packed_metrics.max_offset_from_bottom, 2);
     }
 
     #[test]
@@ -2566,7 +2715,10 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
             crate::app::state::WorkspaceDropTarget::Before(2),
         )
         .unwrap();
-        assert_eq!(indicator_row, app.view.workspace_card_areas[1].rect.y);
+        assert_eq!(
+            indicator_row,
+            app.view.workspace_card_areas[2].rect.y.saturating_sub(1)
+        );
         app.drag = Some(crate::app::state::DragState {
             target: crate::app::state::DragTarget::WorkspaceReorder {
                 source_ws_idx: 0,

@@ -338,7 +338,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Custom values reported through workspace metadata use a $name token, for example $jj_status.
 # Inline token styles accept strict #RGB/#RRGGBB foregrounds plus bold and dim booleans.
 # [ui.sidebar.spaces]
-# Blank rows between space entries. Set to 1 to restore the previous spacing.
+# Additional blank rows after the separator between expanded space entries.
 # row_gap = 0
 # rows = [["state_icon", "workspace"], ["branch", "git_status"]]
 
