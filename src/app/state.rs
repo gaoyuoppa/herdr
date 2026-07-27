@@ -1913,6 +1913,30 @@ impl AppState {
             return Vec::new();
         };
         let mut candidates = Vec::new();
+        if self
+            .workspaces
+            .iter()
+            .any(|workspace| workspace.id == source.workspace_id)
+        {
+            candidates.push(PaneTransferCandidate {
+                destination: PaneTransferDestination::NewTab {
+                    workspace_id: source.workspace_id.clone(),
+                },
+            });
+        }
+        candidates.push(PaneTransferCandidate {
+            destination: PaneTransferDestination::NewWorkspace,
+        });
+        candidates.extend(
+            self.workspaces
+                .iter()
+                .filter(|workspace| workspace.id != source.workspace_id)
+                .map(|workspace| PaneTransferCandidate {
+                    destination: PaneTransferDestination::NewTab {
+                        workspace_id: workspace.id.clone(),
+                    },
+                }),
+        );
         for workspace in &self.workspaces {
             for tab in &workspace.tabs {
                 if tab.zoomed {
@@ -1947,18 +1971,6 @@ impl AppState {
                 }
             }
         }
-        candidates.extend(
-            self.workspaces
-                .iter()
-                .map(|workspace| PaneTransferCandidate {
-                    destination: PaneTransferDestination::NewTab {
-                        workspace_id: workspace.id.clone(),
-                    },
-                }),
-        );
-        candidates.push(PaneTransferCandidate {
-            destination: PaneTransferDestination::NewWorkspace,
-        });
         candidates
     }
 
@@ -2079,7 +2091,7 @@ impl AppState {
         }
     }
 
-    fn resolve_pane_transfer_identity(
+    pub(crate) fn resolve_pane_transfer_identity(
         &self,
         workspace_id: &str,
         tab_id: &str,
@@ -2923,6 +2935,50 @@ mod tests {
         state.ensure_test_terminals();
 
         state.assert_invariants_for_test();
+    }
+
+    #[test]
+    fn pane_transfer_detach_targets_stay_ahead_of_many_split_moves() {
+        let mut state = AppState::test_new();
+        let mut workspace = crate::workspace::Workspace::test_new("many-panes");
+        let source_pane_id = workspace.tabs[0].root_pane;
+        workspace.test_split(ratatui::layout::Direction::Horizontal);
+        workspace.test_split(ratatui::layout::Direction::Vertical);
+        workspace.test_split(ratatui::layout::Direction::Horizontal);
+        state.workspaces = vec![workspace];
+        let source = state
+            .pane_transfer_source(0, 0, source_pane_id)
+            .expect("transfer source");
+        state.pane_layout = Some(PaneLayoutInteractionState {
+            ws_idx: 0,
+            tab_idx: 0,
+            source_pane_id,
+            interaction: PaneLayoutInteraction::Transfer(PaneTransferState {
+                source: source.clone(),
+                origin: PaneTransferOrigin::ContextMenu,
+                selected: None,
+            }),
+        });
+
+        let candidates = state.pane_transfer_candidates();
+
+        assert!(
+            candidates.len() > 10,
+            "fixture must overflow the visible picker rows"
+        );
+        assert!(matches!(
+            &candidates[0].destination,
+            PaneTransferDestination::NewTab { workspace_id }
+                if workspace_id == &source.workspace_id
+        ));
+        assert!(matches!(
+            &candidates[1].destination,
+            PaneTransferDestination::NewWorkspace
+        ));
+        assert!(candidates[2..].iter().all(|candidate| matches!(
+            candidate.destination,
+            PaneTransferDestination::PaneEdge { .. }
+        )));
     }
 
     fn navigator_row_for_display(is_workspace: bool) -> NavigatorRow {
