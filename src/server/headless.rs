@@ -344,10 +344,17 @@ fn apply_terminal_attach_scroll(
                 .try_send_bytes(Bytes::from(bytes))
                 .map_err(|err| format!("terminal attach alternate scroll input failed: {err}"))?;
         }
-        Some(crate::pane::WheelRouting::HostScroll) | None => match direction {
-            AttachScrollDirection::Up => runtime.scroll_up(lines.max(1) as usize),
-            AttachScrollDirection::Down => runtime.scroll_down(lines.max(1) as usize),
-        },
+        Some(crate::pane::WheelRouting::HostScroll) | None => {
+            let direction = match direction {
+                AttachScrollDirection::Up => crate::terminal::HostScrollDirection::Up,
+                AttachScrollDirection::Down => crate::terminal::HostScrollDirection::Down,
+            };
+            runtime.apply_host_wheel_scroll(
+                direction,
+                KeyModifiers::from_bits_truncate(modifiers),
+                lines.max(1) as usize,
+            );
+        }
     }
     Ok(())
 }
@@ -5925,6 +5932,152 @@ next_tab = ""
         .expect("scroll down");
         let metrics = runtime.scroll_metrics().expect("scroll metrics");
         assert_eq!(metrics.offset_from_bottom, 1);
+        drop(runtime);
+        drop(_runtime_guard);
+        rt.shutdown_timeout(Duration::from_millis(100));
+    }
+
+    #[test]
+    fn accelerated_wheel_terminal_attach_uses_lines_page_and_endpoints() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime");
+        let _runtime_guard = rt.enter();
+        let bytes = (0..80)
+            .map(|line| format!("{line:06}\r\n"))
+            .collect::<String>()
+            .into_bytes();
+        let runtime =
+            crate::terminal::TerminalRuntime::test_with_scrollback_bytes(20, 5, 4096, &bytes);
+        let apply_wheel = |direction, modifiers: KeyModifiers| {
+            apply_terminal_attach_scroll(
+                &runtime,
+                AttachScrollSource::Wheel,
+                direction,
+                3,
+                None,
+                None,
+                modifiers.bits(),
+            )
+            .expect("attach wheel scroll");
+        };
+
+        apply_wheel(AttachScrollDirection::Up, KeyModifiers::empty());
+        let metrics = runtime.scroll_metrics().expect("scroll metrics");
+        assert_eq!(metrics.offset_from_bottom, 3);
+        let page_lines = metrics.viewport_rows.saturating_sub(1).max(1);
+
+        apply_wheel(AttachScrollDirection::Up, KeyModifiers::SHIFT);
+        let metrics = runtime.scroll_metrics().expect("scroll metrics");
+        assert_eq!(
+            metrics.offset_from_bottom,
+            (3 + page_lines).min(metrics.max_offset_from_bottom)
+        );
+
+        apply_wheel(AttachScrollDirection::Up, KeyModifiers::CONTROL);
+        let metrics = runtime.scroll_metrics().expect("scroll metrics");
+        assert_eq!(metrics.offset_from_bottom, metrics.max_offset_from_bottom);
+
+        apply_wheel(AttachScrollDirection::Down, KeyModifiers::SUPER);
+        assert_eq!(
+            runtime
+                .scroll_metrics()
+                .expect("scroll metrics")
+                .offset_from_bottom,
+            0
+        );
+
+        drop(runtime);
+        drop(_runtime_guard);
+        rt.shutdown_timeout(Duration::from_millis(100));
+    }
+
+    #[test]
+    fn terminal_attach_mouse_reporting_wheel_modifiers_do_not_host_scroll() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime");
+        let _runtime_guard = rt.enter();
+        let mut bytes = (0..80)
+            .map(|line| format!("{line:06}\r\n"))
+            .collect::<String>()
+            .into_bytes();
+        bytes.extend_from_slice(b"\x1b[?1000h\x1b[?1006h");
+        let (runtime, mut input_rx) =
+            crate::terminal::TerminalRuntime::test_with_channel_and_scrollback_bytes(
+                20, 5, 4096, &bytes, 4,
+            );
+
+        apply_terminal_attach_scroll(
+            &runtime,
+            AttachScrollSource::Wheel,
+            AttachScrollDirection::Up,
+            3,
+            Some(1),
+            Some(1),
+            KeyModifiers::CONTROL.bits(),
+        )
+        .expect("mouse reporting wheel");
+
+        assert_eq!(
+            runtime
+                .scroll_metrics()
+                .expect("scroll metrics")
+                .offset_from_bottom,
+            0
+        );
+        assert!(!input_rx
+            .try_recv()
+            .expect("mouse report wheel input")
+            .is_empty());
+
+        drop(runtime);
+        drop(_runtime_guard);
+        rt.shutdown_timeout(Duration::from_millis(100));
+    }
+
+    #[test]
+    fn terminal_attach_alternate_scroll_modifiers_do_not_host_scroll() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime");
+        let _runtime_guard = rt.enter();
+        let mut bytes = (0..80)
+            .map(|line| format!("{line:06}\r\n"))
+            .collect::<String>()
+            .into_bytes();
+        bytes.extend_from_slice(b"\x1b[?1049h\x1b[?1007h");
+        let (runtime, mut input_rx) =
+            crate::terminal::TerminalRuntime::test_with_channel_and_scrollback_bytes(
+                20, 5, 4096, &bytes, 4,
+            );
+
+        apply_terminal_attach_scroll(
+            &runtime,
+            AttachScrollSource::Wheel,
+            AttachScrollDirection::Up,
+            3,
+            None,
+            None,
+            KeyModifiers::SHIFT.bits(),
+        )
+        .expect("alternate scroll wheel");
+
+        assert_eq!(
+            runtime
+                .scroll_metrics()
+                .expect("scroll metrics")
+                .offset_from_bottom,
+            0
+        );
+        assert!(!input_rx
+            .try_recv()
+            .expect("alternate scroll input")
+            .is_empty());
+
         drop(runtime);
         drop(_runtime_guard);
         rt.shutdown_timeout(Duration::from_millis(100));
