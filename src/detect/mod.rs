@@ -45,6 +45,7 @@ pub enum Agent {
     Claude,
     Codex,
     Gemini,
+    Qwen,
     Cursor,
     Devin,
     Antigravity,
@@ -65,11 +66,12 @@ pub enum Agent {
 }
 
 impl Agent {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::Pi,
         Self::Claude,
         Self::Codex,
         Self::Gemini,
+        Self::Qwen,
         Self::Cursor,
         Self::Devin,
         Self::Antigravity,
@@ -89,11 +91,12 @@ impl Agent {
         Self::Maki,
     ];
 
-    pub const SCREEN_MANIFEST_AGENTS: [Self; 19] = [
+    pub const SCREEN_MANIFEST_AGENTS: [Self; 20] = [
         Self::Pi,
         Self::Claude,
         Self::Codex,
         Self::Gemini,
+        Self::Qwen,
         Self::Cursor,
         Self::Devin,
         Self::Antigravity,
@@ -118,6 +121,7 @@ pub fn agent_label(agent: Agent) -> &'static str {
         Agent::Claude => "claude",
         Agent::Codex => "codex",
         Agent::Gemini => "gemini",
+        Agent::Qwen => "qwen",
         Agent::Cursor => "cursor",
         Agent::Devin => "devin",
         Agent::Antigravity => "agy",
@@ -144,6 +148,7 @@ pub fn interactive_agent_executable(agent: Agent) -> &'static str {
         Agent::Claude => "claude",
         Agent::Codex => "codex",
         Agent::Gemini => "gemini",
+        Agent::Qwen => "qwen",
         Agent::Cursor => "cursor-agent",
         Agent::Devin => "devin",
         Agent::Antigravity => "agy",
@@ -180,6 +185,7 @@ fn lookup_agent(name: &str) -> Option<Agent> {
         "claude" | "claude-code" => Some(Agent::Claude),
         "codex" => Some(Agent::Codex),
         "gemini" => Some(Agent::Gemini),
+        "qwen" | "qwen-code" | "qwen code" => Some(Agent::Qwen),
         "cursor" | "cursor-agent" => Some(Agent::Cursor),
         "devin" | "devin-cli" | "devin cli" => Some(Agent::Devin),
         "agy" | "antigravity" | "antigravity-cli" => Some(Agent::Antigravity),
@@ -289,6 +295,7 @@ pub(crate) fn full_lifecycle_hook_authority(source: &str, agent_label: &str) -> 
             | ("herdr:opencode", "opencode")
             | ("herdr:kilo", "kilo")
             | ("herdr:kimi", "kimi")
+            | ("herdr:qwen", "qwen")
     )
 }
 
@@ -672,6 +679,8 @@ mod tests {
         assert_eq!(identify_agent("claude-code"), Some(Agent::Claude));
         assert_eq!(identify_agent("codex"), Some(Agent::Codex));
         assert_eq!(identify_agent("gemini"), Some(Agent::Gemini));
+        assert_eq!(identify_agent("qwen"), Some(Agent::Qwen));
+        assert_eq!(identify_agent("qwen-code"), Some(Agent::Qwen));
         assert_eq!(identify_agent("cursor"), Some(Agent::Cursor));
         assert_eq!(identify_agent("cursor-agent"), Some(Agent::Cursor));
         assert_eq!(identify_agent("devin"), Some(Agent::Devin));
@@ -705,6 +714,7 @@ mod tests {
     fn parse_known_agent_labels() {
         assert_eq!(parse_agent_label("pi"), Some(Agent::Pi));
         assert_eq!(parse_agent_label("claude"), Some(Agent::Claude));
+        assert_eq!(parse_agent_label("qwen-code"), Some(Agent::Qwen));
         assert_eq!(parse_agent_label("cursor-agent"), Some(Agent::Cursor));
         assert_eq!(parse_agent_label("devin-cli"), Some(Agent::Devin));
         assert_eq!(parse_agent_label("agy"), Some(Agent::Antigravity));
@@ -743,6 +753,7 @@ mod tests {
             (Agent::Claude, "claude"),
             (Agent::Codex, "codex"),
             (Agent::Gemini, "gemini"),
+            (Agent::Qwen, "qwen"),
             (Agent::Cursor, "cursor-agent"),
             (Agent::Devin, "devin"),
             (Agent::Antigravity, "agy"),
@@ -797,6 +808,12 @@ mod tests {
     }
 
     #[test]
+    fn qwen_hooks_are_full_lifecycle_authority_with_screen_fallback() {
+        assert!(full_lifecycle_hook_authority("herdr:qwen", "qwen"));
+        assert!(Agent::SCREEN_MANIFEST_AGENTS.contains(&Agent::Qwen));
+    }
+
+    #[test]
     fn identify_unknown_processes() {
         assert_eq!(identify_agent("bash"), None);
         assert_eq!(identify_agent("zsh"), None);
@@ -825,6 +842,23 @@ mod tests {
         assert_eq!(
             identify_agent_in_job(&job),
             Some((Agent::Codex, "codex".to_string()))
+        );
+    }
+
+    #[test]
+    fn identify_agent_in_job_detects_node_wrapped_qwen_code() {
+        let job = crate::platform::ForegroundJob {
+            process_group_id: 123,
+            processes: vec![foreground_process(
+                123,
+                "node",
+                &["node", "/usr/local/lib/node_modules/qwen-code/bin/qwen.js"],
+            )],
+        };
+
+        assert_eq!(
+            identify_agent_in_job(&job),
+            Some((Agent::Qwen, "qwen".to_string()))
         );
     }
 
