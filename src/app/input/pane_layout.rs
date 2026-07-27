@@ -1,8 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use rust_i18n::t;
 
 use crate::{
     api::schema::{
         LayoutRearrangeOperation, LayoutRearrangeParams, PaneDirection, PaneLayoutPreset,
+        PaneMoveDestination as ApiPaneMoveDestination, PaneMoveParams, ResponseResult,
+        SplitDirection, SuccessResponse,
     },
     app::{
         state::{
@@ -279,6 +282,10 @@ impl App {
         let Some(layout) = self.state.pane_layout.clone() else {
             return;
         };
+        if matches!(&layout.interaction, PaneLayoutInteraction::Transfer(_)) {
+            self.commit_pane_transfer_via_api();
+            return;
+        }
         let Some(anchor_pane_id) = self.public_pane_id(layout.ws_idx, layout.source_pane_id) else {
             cancel_pane_layout(&mut self.state);
             return;
@@ -304,7 +311,7 @@ impl App {
                 anchor_pane_id,
                 preset: preset.into(),
             },
-            PaneLayoutInteraction::Transfer(_) => return,
+            PaneLayoutInteraction::Transfer(_) => unreachable!("transfer handled above"),
         };
         self.runtime_layout_rearrange(
             "tui.layout.rearrange",
@@ -315,6 +322,163 @@ impl App {
         );
         self.state.pane_layout = None;
         leave_modal(&mut self.state);
+    }
+
+    pub(crate) fn commit_pane_transfer_via_api(&mut self) {
+        let Some(crate::app::state::PaneTransferState {
+            source,
+            selected: Some(destination),
+            ..
+        }) = self.state.pane_layout.as_ref().and_then(|layout| {
+            let PaneLayoutInteraction::Transfer(transfer) = &layout.interaction else {
+                return None;
+            };
+            Some(transfer.clone())
+        })
+        else {
+            self.finish_pane_transfer(false);
+            return;
+        };
+        let Some((source_ws_idx, source_tab_idx, source_pane_id)) =
+            self.state.resolve_pane_transfer_source(&source)
+        else {
+            self.finish_pane_transfer(false);
+            return;
+        };
+        if self.state.workspaces[source_ws_idx].tabs[source_tab_idx].zoomed {
+            self.finish_pane_transfer(false);
+            return;
+        }
+
+        let changed = match destination {
+            PaneTransferDestination::PaneEdge {
+                workspace_id,
+                tab_id,
+                pane_id,
+                placement,
+            } => {
+                let target_source = crate::app::state::PaneTransferSource {
+                    workspace_id,
+                    tab_id,
+                    pane_id,
+                };
+                let Some((target_ws_idx, target_tab_idx, target_pane_id)) =
+                    self.state.resolve_pane_transfer_source(&target_source)
+                else {
+                    self.finish_pane_transfer(false);
+                    return;
+                };
+                if source_pane_id == target_pane_id
+                    || self.state.workspaces[target_ws_idx].tabs[target_tab_idx].zoomed
+                {
+                    self.finish_pane_transfer(false);
+                    return;
+                }
+                if source_ws_idx == target_ws_idx && source_tab_idx == target_tab_idx {
+                    let response = self.runtime_layout_rearrange(
+                        "tui.pane.transfer.rearrange",
+                        LayoutRearrangeParams {
+                            operation: LayoutRearrangeOperation::Reposition {
+                                source_pane_id: source.pane_id,
+                                target_pane_id: target_source.pane_id,
+                                placement: placement.into(),
+                                ratio: Some(0.5),
+                            },
+                            focus: true,
+                        },
+                    );
+                    pane_transfer_response_changed(&response)
+                } else {
+                    let response = self.runtime_pane_move(
+                        "tui.pane.transfer.move",
+                        PaneMoveParams {
+                            pane_id: source.pane_id,
+                            destination: ApiPaneMoveDestination::Tab {
+                                tab_id: target_source.tab_id,
+                                target_pane_id: Some(target_source.pane_id),
+                                split: placement_to_split_direction(placement),
+                                ratio: Some(0.5),
+                            },
+                            focus: true,
+                        },
+                    );
+                    pane_transfer_response_changed(&response)
+                }
+            }
+            PaneTransferDestination::NewTab { workspace_id } => {
+                if !self
+                    .state
+                    .workspaces
+                    .iter()
+                    .any(|workspace| workspace.id == workspace_id)
+                {
+                    self.finish_pane_transfer(false);
+                    return;
+                }
+                let response = self.runtime_pane_move(
+                    "tui.pane.transfer.new_tab",
+                    PaneMoveParams {
+                        pane_id: source.pane_id,
+                        destination: ApiPaneMoveDestination::NewTab {
+                            workspace_id: Some(workspace_id),
+                            label: None,
+                        },
+                        focus: true,
+                    },
+                );
+                pane_transfer_response_changed(&response)
+            }
+            PaneTransferDestination::NewWorkspace => {
+                let response = self.runtime_pane_move(
+                    "tui.pane.transfer.new_workspace",
+                    PaneMoveParams {
+                        pane_id: source.pane_id,
+                        destination: ApiPaneMoveDestination::NewWorkspace {
+                            label: None,
+                            tab_label: None,
+                        },
+                        focus: true,
+                    },
+                );
+                pane_transfer_response_changed(&response)
+            }
+        };
+        self.finish_pane_transfer(changed);
+    }
+
+    fn finish_pane_transfer(&mut self, changed: bool) {
+        let previous_toast = self.state.toast.clone();
+        self.state.pane_layout = None;
+        leave_modal(&mut self.state);
+        if changed {
+            return;
+        }
+        self.state.toast = Some(crate::app::state::ToastNotification {
+            kind: crate::app::state::ToastKind::NeedsAttention,
+            title: t!("state.pane_transfer_failed").to_string(),
+            context: String::new(),
+            position: None,
+            target: None,
+        });
+        self.sync_toast_deadline(previous_toast);
+    }
+}
+
+pub(crate) fn placement_to_split_direction(placement: PanePlacement) -> SplitDirection {
+    match placement {
+        PanePlacement::Left | PanePlacement::Right => SplitDirection::Right,
+        PanePlacement::Up | PanePlacement::Down => SplitDirection::Down,
+    }
+}
+
+fn pane_transfer_response_changed(response: &str) -> bool {
+    let Ok(success) = serde_json::from_str::<SuccessResponse>(response) else {
+        return false;
+    };
+    match success.result {
+        ResponseResult::LayoutRearrange { rearrange } => rearrange.changed,
+        ResponseResult::PaneMove { move_result } => move_result.changed,
+        _ => false,
     }
 }
 
@@ -615,6 +779,225 @@ mod tests {
             app.state.workspaces[0].tabs[target_tab_idx].layout,
             target_layout
         );
+    }
+
+    #[test]
+    fn transfer_commit_rearranges_same_tab_without_moving_runtime() {
+        let (mut app, source, target, _) = app_with_three_panes();
+        let source_terminal = app.state.workspaces[0].tabs[0]
+            .terminal_id(source)
+            .expect("source terminal")
+            .clone();
+        assert!(open_pane_transfer(
+            &mut app.state,
+            PaneTransferOrigin::ContextMenu,
+            0,
+            0,
+            source,
+        ));
+        let destination = PaneTransferDestination::PaneEdge {
+            workspace_id: app.public_workspace_id(0),
+            tab_id: app.public_tab_id(0, 0).expect("tab id"),
+            pane_id: app.public_pane_id(0, target).expect("target id"),
+            placement: PanePlacement::Left,
+        };
+        set_transfer_destination(&mut app.state, destination);
+
+        app.commit_pane_transfer_via_api();
+
+        assert_eq!(
+            app.state.workspaces[0].tabs[0].terminal_id(source),
+            Some(&source_terminal)
+        );
+        let panes = app.state.workspaces[0].tabs[0]
+            .layout
+            .panes(Rect::new(0, 0, 80, 24));
+        let source_rect = panes
+            .iter()
+            .find(|pane| pane.id == source)
+            .expect("source")
+            .rect;
+        let target_rect = panes
+            .iter()
+            .find(|pane| pane.id == target)
+            .expect("target")
+            .rect;
+        assert!(source_rect.x < target_rect.x);
+        assert!(app.state.pane_layout.is_none());
+    }
+
+    #[test]
+    fn transfer_commit_moves_existing_runtime_across_workspaces() {
+        let (mut app, source, _, _) = app_with_three_panes();
+        app.state.workspaces.push(Workspace::test_new("target"));
+        app.state.ensure_test_terminals();
+        let source_terminal = app.state.workspaces[0].tabs[0]
+            .terminal_id(source)
+            .expect("source terminal")
+            .clone();
+        let source_public = app.public_pane_id(0, source).expect("source public");
+        let target = app.state.workspaces[1].tabs[0].root_pane;
+        assert!(open_pane_transfer(
+            &mut app.state,
+            PaneTransferOrigin::ContextMenu,
+            0,
+            0,
+            source,
+        ));
+        let destination = PaneTransferDestination::PaneEdge {
+            workspace_id: app.public_workspace_id(1),
+            tab_id: app.public_tab_id(1, 0).expect("target tab"),
+            pane_id: app.public_pane_id(1, target).expect("target pane"),
+            placement: PanePlacement::Right,
+        };
+        set_transfer_destination(&mut app.state, destination);
+
+        app.commit_pane_transfer_via_api();
+
+        let (ws_idx, pane_id) = app
+            .parse_pane_id(&source_public)
+            .expect("old alias resolves");
+        assert_eq!(ws_idx, 1);
+        assert_eq!(
+            app.state.workspaces[ws_idx].tabs[0].terminal_id(pane_id),
+            Some(&source_terminal)
+        );
+        assert!(app.state.pane_layout.is_none());
+    }
+
+    #[test]
+    fn transfer_commit_detaches_existing_runtime_to_new_tab() {
+        let (mut app, source, _, _) = app_with_three_panes();
+        let source_terminal = app.state.workspaces[0].tabs[0]
+            .terminal_id(source)
+            .expect("source terminal")
+            .clone();
+        let source_public = app.public_pane_id(0, source).expect("source public");
+        assert!(open_pane_transfer(
+            &mut app.state,
+            PaneTransferOrigin::ContextMenu,
+            0,
+            0,
+            source,
+        ));
+        let workspace_id = app.public_workspace_id(0);
+        set_transfer_destination(
+            &mut app.state,
+            PaneTransferDestination::NewTab { workspace_id },
+        );
+
+        app.commit_pane_transfer_via_api();
+
+        let (ws_idx, pane_id) = app
+            .parse_pane_id(&source_public)
+            .expect("old alias resolves");
+        let tab_idx = app.state.workspaces[ws_idx]
+            .find_tab_index_for_pane(pane_id)
+            .expect("moved pane tab");
+        assert_ne!(tab_idx, 0);
+        assert_eq!(
+            app.state.workspaces[ws_idx].tabs[tab_idx].terminal_id(pane_id),
+            Some(&source_terminal)
+        );
+        assert_eq!(app.state.workspaces[ws_idx].tabs.len(), 2);
+    }
+
+    #[test]
+    fn transfer_commit_detaches_existing_runtime_to_new_workspace() {
+        let (mut app, source, _, _) = app_with_three_panes();
+        let source_terminal = app.state.workspaces[0].tabs[0]
+            .terminal_id(source)
+            .expect("source terminal")
+            .clone();
+        let source_public = app.public_pane_id(0, source).expect("source public");
+        assert!(open_pane_transfer(
+            &mut app.state,
+            PaneTransferOrigin::ContextMenu,
+            0,
+            0,
+            source,
+        ));
+        set_transfer_destination(&mut app.state, PaneTransferDestination::NewWorkspace);
+
+        app.commit_pane_transfer_via_api();
+
+        let (ws_idx, pane_id) = app
+            .parse_pane_id(&source_public)
+            .expect("old alias resolves");
+        assert_eq!(ws_idx, 1);
+        assert_eq!(
+            app.state.workspaces[ws_idx].tabs[0].terminal_id(pane_id),
+            Some(&source_terminal)
+        );
+        assert_eq!(app.state.workspaces.len(), 2);
+    }
+
+    #[test]
+    fn transfer_commit_rejects_stale_target_without_changing_source_layout() {
+        let (mut app, source, _, _) = app_with_three_panes();
+        let before = app.state.workspaces[0].tabs[0].layout.clone();
+        assert!(open_pane_transfer(
+            &mut app.state,
+            PaneTransferOrigin::ContextMenu,
+            0,
+            0,
+            source,
+        ));
+        let workspace_id = app.public_workspace_id(0);
+        let tab_id = app.public_tab_id(0, 0).expect("tab id");
+        set_transfer_destination(
+            &mut app.state,
+            PaneTransferDestination::PaneEdge {
+                workspace_id,
+                tab_id,
+                pane_id: "missing:pane".into(),
+                placement: PanePlacement::Right,
+            },
+        );
+
+        app.commit_pane_transfer_via_api();
+
+        assert_eq!(app.state.workspaces[0].tabs[0].layout, before);
+        assert!(app.state.pane_layout.is_none());
+        assert_eq!(
+            app.state.toast.as_ref().map(|toast| toast.title.as_str()),
+            Some(t!("state.pane_transfer_failed").as_ref())
+        );
+    }
+
+    #[test]
+    fn transfer_commit_rejects_zoomed_target_without_changing_source_layout() {
+        let (mut app, source, _, _) = app_with_three_panes();
+        app.state.workspaces.push(Workspace::test_new("target"));
+        app.state.ensure_test_terminals();
+        let before = app.state.workspaces[0].tabs[0].layout.clone();
+        let target = app.state.workspaces[1].tabs[0].root_pane;
+        assert!(open_pane_transfer(
+            &mut app.state,
+            PaneTransferOrigin::ContextMenu,
+            0,
+            0,
+            source,
+        ));
+        let workspace_id = app.public_workspace_id(1);
+        let tab_id = app.public_tab_id(1, 0).expect("target tab");
+        let pane_id = app.public_pane_id(1, target).expect("target pane");
+        set_transfer_destination(
+            &mut app.state,
+            PaneTransferDestination::PaneEdge {
+                workspace_id,
+                tab_id,
+                pane_id,
+                placement: PanePlacement::Right,
+            },
+        );
+        app.state.workspaces[1].tabs[0].zoomed = true;
+
+        app.commit_pane_transfer_via_api();
+
+        assert_eq!(app.state.workspaces[0].tabs[0].layout, before);
+        assert!(app.state.workspaces[0].tabs[0].panes.contains_key(&source));
+        assert!(app.state.pane_layout.is_none());
     }
 
     #[test]
