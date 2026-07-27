@@ -7539,6 +7539,7 @@ next_tab = ""
         for mode in [
             crate::app::Mode::GlobalMenu,
             crate::app::Mode::ContextMenu,
+            crate::app::Mode::PaneLayout,
             crate::app::Mode::Navigator,
         ] {
             assert!(!events_are_render_neutral_mouse_motion(&events, mode));
