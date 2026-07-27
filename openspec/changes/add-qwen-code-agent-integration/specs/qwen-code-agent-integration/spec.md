@@ -105,3 +105,18 @@ Herdr SHALL remove only its own Qwen hook commands and hook file, and SHALL repo
 #### Scenario: Reinstall repairs registration
 - **WHEN** the user reinstalls an outdated Qwen integration
 - **THEN** Herdr restores all expected registrations and status becomes current
+
+### Requirement: Qwen native session restore
+Herdr SHALL preserve a valid Qwen session id reported by the official integration and SHALL resume that exact conversation after a cold session restore when native agent restore is enabled.
+
+#### Scenario: Restore an integration-reported Qwen session
+- **WHEN** a saved pane has an id session reference from `herdr:qwen` for the `qwen` agent
+- **THEN** Herdr starts the pane with `qwen --resume <id>`
+
+#### Scenario: Reject an untrusted Qwen session reference
+- **WHEN** a Qwen session reference comes from a non-official source, has a path reference, or contains an invalid id
+- **THEN** Herdr does not construct a native Qwen resume plan
+
+#### Scenario: Restore with the existing Qwen hook version
+- **WHEN** the installed version 1 Qwen hook has reported a valid session id
+- **THEN** native restore uses that id without requiring the hook to be reinstalled

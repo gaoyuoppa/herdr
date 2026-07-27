@@ -62,9 +62,9 @@ Herdr 以两种不同方式使用集成:
 
 自定义 socket 集成在定义了原生终端 UI 中不可见的状态时,也可以上报状态。
 
-一些集成会上报智能体的原生会话引用。除非被 `[session] resume_agents_on_restore = false` 禁用,Herdr 会在服务器重启后使用官方会话引用恢复 Claude Code、Codex、Devin CLI、Droid、Kimi Code CLI、Qoder CLI、Cursor Agent CLI、Grok CLI、GitHub Copilot CLI、Pi、OMP、Hermes Agent、OpenCode、Kilo Code CLI 和 MastraCode 的窗格。
+一些集成会上报智能体的原生会话引用。除非被 `[session] resume_agents_on_restore = false` 禁用,Herdr 会在服务器重启后使用官方会话引用恢复 Claude Code、Codex、Devin CLI、Droid、Kimi Code CLI、Qwen Code、Qoder CLI、Cursor Agent CLI、Grok CLI、GitHub Copilot CLI、Pi、OMP、Hermes Agent、OpenCode、Kilo Code CLI 和 MastraCode 的窗格。
 
-原生会话恢复需要最新的 Herdr 集成: Pi 集成版本 `2`、OMP 版本 `3`、Claude Code 版本 `6`、Codex 版本 `5`、GitHub Copilot CLI 版本 `2`、Devin CLI 版本 `2`、Droid 版本 `2`、Kimi Code CLI 版本 `3`、Qoder CLI 版本 `2`、Cursor Agent CLI 版本 `1`、Grok CLI 版本 `1`、OpenCode 版本 `5`、Kilo Code CLI 版本 `1`、Hermes Agent 版本 `2`、MastraCode 版本 `1`。用 `herdr integration status` 查看已安装版本。
+原生会话恢复需要最新的 Herdr 集成: Pi 集成版本 `2`、OMP 版本 `3`、Claude Code 版本 `6`、Codex 版本 `5`、GitHub Copilot CLI 版本 `2`、Devin CLI 版本 `2`、Droid 版本 `2`、Kimi Code CLI 版本 `3`、Qwen Code 版本 `1`、Qoder CLI 版本 `2`、Cursor Agent CLI 版本 `1`、Grok CLI 版本 `1`、OpenCode 版本 `5`、Kilo Code CLI 版本 `1`、Hermes Agent 版本 `2`、MastraCode 版本 `1`。用 `herdr integration status` 查看已安装版本。
 
 ## Pi
 
@@ -228,7 +228,7 @@ herdr integration install qwen
 
 Herdr 默认使用 `~/.qwen`,设置了 `QWEN_HOME` 时使用后者。Qwen 配置目录必须已经存在。安装会写入 `hooks/herdr-agent-state.sh`（Windows 为 `.ps1`）,并且只在 `settings.json` 顶层 `hooks` 对象中添加 Herdr 自有条目。已有模型、MCP 服务器、设置和第三方钩子都会保留。重新安装会修复而不重复添加;卸载只移除 Herdr 条目和脚本。
 
-钩子会记录 Qwen 会话 id 作为实时窗格身份。Herdr 目前不会用它做原生会话恢复,因为尚未接入稳定的 Qwen 恢复命令。
+钩子会记录 Qwen 会话 id,用于实时窗格身份和原生恢复。Herdr 使用 `qwen --resume <id>` 恢复保存的确切对话。现有版本 `1` 钩子已经会上报所需 id,因此当前集成无需重新安装即可支持此功能。
 
 ## Qoder CLI
 

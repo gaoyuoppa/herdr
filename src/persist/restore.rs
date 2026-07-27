@@ -1032,6 +1032,22 @@ mod tests {
     }
 
     #[test]
+    fn restore_plan_resumes_official_qwen_session_id() {
+        let session = super::super::snapshot::PaneAgentSessionSnapshot {
+            source: "herdr:qwen".into(),
+            agent: "qwen".into(),
+            kind: crate::agent_resume::AgentSessionRefKind::Id,
+            value: "qwen-session".into(),
+        };
+
+        assert!(restore_plan_for_snapshot(&session, false).is_none());
+        assert_eq!(
+            restore_plan_for_snapshot(&session, true).unwrap().argv,
+            vec!["qwen", "--resume", "qwen-session"]
+        );
+    }
+
+    #[test]
     fn restore_plan_selection_suppresses_duplicates() {
         let pi_session_path = test_session_path("pi-session.jsonl");
         let session = super::super::snapshot::PaneAgentSessionSnapshot {
