@@ -94,8 +94,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn handoff_nudge_only_consumes_flagged_runtimes_once() {
+    #[tokio::test]
+    async fn handoff_nudge_only_consumes_flagged_runtimes_once() {
         let (replayed, replayed_nudges) = TerminalRuntime::test_with_handoff_repaint_needed(false);
         let (blank, blank_nudges) = TerminalRuntime::test_with_handoff_repaint_needed(true);
         let mut registry = TerminalRuntimeRegistry::new();
