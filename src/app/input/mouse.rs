@@ -2100,8 +2100,8 @@ mod tests {
     async fn pane_title_drag_opens_transfer_after_both_thresholds() {
         let mut app = app_for_mouse_test();
         let mut workspace = Workspace::test_new("titles");
-        let source = workspace.tabs[0].root_pane;
-        let target = workspace.test_split(Direction::Horizontal);
+        let target = workspace.tabs[0].root_pane;
+        let source = workspace.test_split(Direction::Horizontal);
         app.state.workspaces = vec![workspace];
         app.state.ensure_test_terminals();
         app.state.active = Some(0);
@@ -2120,6 +2120,11 @@ mod tests {
                 .set_manual_label(label.into());
         }
         crate::ui::compute_view(&mut app.state, Rect::new(0, 0, 106, 24));
+        let source_terminal = app.state.workspaces[0].tabs[0]
+            .terminal_id(source)
+            .expect("source terminal")
+            .clone();
+        let before_layout = app.state.workspaces[0].tabs[0].layout.clone();
         let title = app
             .state
             .view
@@ -2160,6 +2165,20 @@ mod tests {
                         == app.public_pane_id(0, source).expect("source public id")
         ));
         assert!(app.state.pane_title_press.is_none());
+
+        app.handle_mouse(mouse(
+            MouseEventKind::Up(MouseButton::Left),
+            target_info.inner_rect.x,
+            target_info.inner_rect.y,
+        ));
+
+        assert_eq!(app.state.mode, Mode::Terminal);
+        assert!(app.state.pane_layout.is_none());
+        assert_ne!(app.state.workspaces[0].tabs[0].layout, before_layout);
+        assert_eq!(
+            app.state.workspaces[0].tabs[0].terminal_id(source),
+            Some(&source_terminal)
+        );
     }
 
     #[tokio::test]
