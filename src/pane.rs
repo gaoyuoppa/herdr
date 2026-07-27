@@ -1,6 +1,8 @@
 use std::cell::Cell;
 use std::io;
 use std::path::Path;
+#[cfg(all(test, unix))]
+use std::sync::atomic::AtomicUsize;
 use std::sync::{
     atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, Ordering},
     Arc, Mutex,
@@ -993,6 +995,8 @@ pub struct PaneRuntime {
     full_lifecycle_authority_active: Arc<AtomicBool>,
     detect_reset_notify: Arc<Notify>,
     pending_release: Arc<Mutex<Option<PendingAgentRelease>>>,
+    #[cfg(unix)]
+    handoff_repaint_needed: AtomicBool,
     preserve_processes_on_drop: bool,
     // Task handles for deterministic shutdown
     detect_handle: Option<tokio::task::AbortHandle>,
@@ -1004,6 +1008,8 @@ enum PaneRuntimeIo {
     TestChannel {
         sender: mpsc::Sender<Bytes>,
         resize_tx: watch::Sender<(u16, u16, u32, u32)>,
+        #[cfg(unix)]
+        handoff_nudge_count: Option<Arc<AtomicUsize>>,
     },
 }
 
@@ -1107,7 +1113,14 @@ impl PaneRuntimeIo {
                 actor.nudge_child_redraw_after_handoff(rows, cols, cell_width_px, cell_height_px);
             }
             #[cfg(test)]
-            PaneRuntimeIo::TestChannel { .. } => {}
+            PaneRuntimeIo::TestChannel {
+                handoff_nudge_count,
+                ..
+            } => {
+                if let Some(count) = handoff_nudge_count {
+                    count.fetch_add(1, Ordering::AcqRel);
+                }
+            }
         }
     }
 
@@ -1844,8 +1857,11 @@ impl PaneRuntime {
         } else {
             pane_terminal.seed_keyboard_protocol_flags(keyboard_protocol_flags);
         }
-        if let Some(ansi) = initial_history_ansi.as_deref() {
-            pane_terminal.seed_history_ansi(ansi);
+        let replayed = initial_history_ansi
+            .as_deref()
+            .is_some_and(|ansi| pane_terminal.seed_history_ansi(ansi));
+        if replayed {
+            pane_terminal.scroll_reset();
         }
         let terminal = Arc::new(PaneTerminal::new(pane_terminal));
         let child_pid = Arc::new(AtomicU32::new(child_pid));
@@ -1935,6 +1951,7 @@ impl PaneRuntime {
             full_lifecycle_authority_active,
             detect_reset_notify,
             pending_release,
+            handoff_repaint_needed: AtomicBool::new(!replayed),
             preserve_processes_on_drop: true,
             detect_handle: Some(detect_handle),
         })
@@ -2452,6 +2469,8 @@ impl PaneRuntime {
             full_lifecycle_authority_active,
             detect_reset_notify,
             pending_release,
+            #[cfg(unix)]
+            handoff_repaint_needed: AtomicBool::new(false),
             preserve_processes_on_drop: false,
             detect_handle,
         })
@@ -2522,6 +2541,11 @@ impl PaneRuntime {
         let (rows, cols, cell_width_px, cell_height_px) = self.current_size.get();
         self.io
             .nudge_child_redraw_after_handoff(rows, cols, cell_width_px, cell_height_px);
+    }
+
+    #[cfg(unix)]
+    pub fn take_handoff_repaint_needed(&self) -> bool {
+        self.handoff_repaint_needed.swap(false, Ordering::AcqRel)
     }
 
     /// Scroll up by N lines (into scrollback history).
@@ -2936,6 +2960,8 @@ impl PaneRuntime {
                 io: PaneRuntimeIo::TestChannel {
                     sender: tx,
                     resize_tx,
+                    #[cfg(unix)]
+                    handoff_nudge_count: None,
                 },
                 current_size: Cell::new((rows, cols, 0, 0)),
                 child_pid: Arc::new(AtomicU32::new(0)),
@@ -2946,11 +2972,31 @@ impl PaneRuntime {
                 full_lifecycle_authority_active: Arc::new(AtomicBool::new(false)),
                 detect_reset_notify: Arc::new(Notify::new()),
                 pending_release: Arc::new(Mutex::new(None)),
+                #[cfg(unix)]
+                handoff_repaint_needed: AtomicBool::new(false),
                 preserve_processes_on_drop: true,
                 detect_handle: Some(tokio::spawn(async {}).abort_handle()),
             },
             rx,
         )
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn test_with_handoff_repaint_needed(needed: bool) -> (Self, Arc<AtomicUsize>) {
+        let (mut runtime, _rx) = Self::test_with_channel(80, 24);
+        runtime
+            .handoff_repaint_needed
+            .store(needed, Ordering::Release);
+        let handoff_nudge_count = Arc::new(AtomicUsize::new(0));
+        let PaneRuntimeIo::TestChannel {
+            handoff_nudge_count: runtime_nudge_count,
+            ..
+        } = &mut runtime.io
+        else {
+            unreachable!("test runtime must use test channel I/O");
+        };
+        *runtime_nudge_count = Some(handoff_nudge_count.clone());
+        (runtime, handoff_nudge_count)
     }
 }
 
@@ -3490,6 +3536,8 @@ mod tests {
             io: PaneRuntimeIo::TestChannel {
                 sender: tx,
                 resize_tx,
+                #[cfg(unix)]
+                handoff_nudge_count: None,
             },
             current_size: Cell::new((80, 24, 0, 0)),
             child_pid: Arc::new(AtomicU32::new(0)),
@@ -3500,6 +3548,8 @@ mod tests {
             full_lifecycle_authority_active: Arc::new(AtomicBool::new(false)),
             detect_reset_notify: Arc::new(Notify::new()),
             pending_release: Arc::new(Mutex::new(None)),
+            #[cfg(unix)]
+            handoff_repaint_needed: AtomicBool::new(false),
             preserve_processes_on_drop: true,
             detect_handle: Some(tokio::spawn(async {}).abort_handle()),
         };
@@ -3521,6 +3571,8 @@ mod tests {
             io: PaneRuntimeIo::TestChannel {
                 sender: tx,
                 resize_tx,
+                #[cfg(unix)]
+                handoff_nudge_count: None,
             },
             current_size: Cell::new((80, 24, 0, 0)),
             child_pid: Arc::new(AtomicU32::new(0)),
@@ -3531,6 +3583,8 @@ mod tests {
             full_lifecycle_authority_active: Arc::new(AtomicBool::new(false)),
             detect_reset_notify: Arc::new(Notify::new()),
             pending_release: Arc::new(Mutex::new(None)),
+            #[cfg(unix)]
+            handoff_repaint_needed: AtomicBool::new(false),
             preserve_processes_on_drop: true,
             detect_handle: Some(tokio::spawn(async {}).abort_handle()),
         };
