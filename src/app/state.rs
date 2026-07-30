@@ -477,7 +477,7 @@ impl Palette {
             panel_bg: Color::Rgb(25, 23, 36),
             surface0: Color::Rgb(31, 29, 46),
             surface1: Color::Rgb(38, 35, 58),
-            surface_dim: Color::Rgb(25, 23, 36),
+            surface_dim: Color::Rgb(38, 35, 58),
             overlay0: Color::Rgb(110, 106, 134),
             overlay1: Color::Rgb(144, 140, 170),
             text: Color::Rgb(224, 222, 244),
@@ -1817,8 +1817,6 @@ pub struct AppState {
     pub local_sound_playback: bool,
     pub toast_config: ToastConfig,
     pub keybinds: Keybinds,
-    /// Frame counter for spinner animations (wraps around).
-    pub spinner_tick: u32,
     /// UI color palette — all sidebar/UI colors centralized for theming.
     pub palette: Palette,
     /// Currently applied theme name (for settings UI).
@@ -2452,7 +2450,6 @@ impl AppState {
             local_sound_playback: false,
             toast_config: ToastConfig::default(),
             keybinds: Keybinds::default(),
-            spinner_tick: 0,
             palette: Palette::catppuccin(),
             theme_name: "catppuccin".to_string(),
             theme_runtime: ThemeRuntimeConfig {
