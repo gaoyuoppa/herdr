@@ -539,6 +539,15 @@ fn agent_name_from_known_package_path(path: &str) -> Option<String> {
         .map(normalized_agent_lookup_name)
         .collect();
 
+    for window in components.windows(3) {
+        if window[0] == "qwen-code"
+            && window[1] == "lib"
+            && matches!(window[2].as_str(), "cli-entry" | "cli")
+        {
+            return Some(agent_label(Agent::Qwen).to_string());
+        }
+    }
+
     for (package_index, window) in components.windows(3).enumerate() {
         if window != ["node_modules", "@qwen-code", "qwen-code"] {
             continue;
@@ -940,12 +949,35 @@ mod tests {
     }
 
     #[test]
+    fn identify_agent_in_job_detects_standalone_qwen_code_launcher_layout() {
+        let job = crate::platform::ForegroundJob {
+            process_group_id: 123,
+            processes: vec![foreground_process(
+                123,
+                "node",
+                &[
+                    "/root/.local/lib/qwen-code/node/bin/node",
+                    "/root/.local/lib/qwen-code/lib/cli-entry.js",
+                ],
+            )],
+        };
+
+        assert_eq!(
+            identify_agent_in_job(&job),
+            Some((Agent::Qwen, "qwen".to_string()))
+        );
+    }
+
+    #[test]
     fn identify_agent_in_job_ignores_non_entrypoint_qwen_package_scripts() {
         let scripts = [
             "/tmp/node_modules/other/cli.js",
             "/tmp/node_modules/@qwen-code/qwen-code/scripts/build.js",
             "/tmp/node_modules/@qwen-code/qwen-code/node_modules/other/cli.js",
             "/tmp/node_modules/@qwen-code/qwen-code-extra/cli.js",
+            "/tmp/not-qwen-code/lib/cli-entry.js",
+            "/tmp/qwen-code/lib/chunks/cli-entry.js",
+            "/tmp/qwen-code/lib/index.js",
         ];
 
         for script in scripts {
