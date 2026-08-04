@@ -54,7 +54,7 @@ jobs:
             echo "SKIP_PIPELINE=false"
           } >> "$GITHUB_ENV"
 
-      - name: Configure and verify deployment SSH
+      - name: Configure and validate deployment SSH material
         shell: bash
         env:
           DEPLOY_SSH_KEY: ${{ secrets.HERDR_DEPLOY_SSH_KEY }}
@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           {
             echo "FAILURE_STAGE=ssh-configuration"
-            echo "FAILURE_SUMMARY=deployment SSH configuration or connectivity check failed"
+            echo "FAILURE_SUMMARY=deployment SSH variables, key, or known_hosts validation failed"
           } >> "$GITHUB_ENV"
 
           for name in HERDR_DEPLOY_HOST HERDR_DEPLOY_PORT HERDR_DEPLOY_USER HERDR_DEPLOY_PATH; do
@@ -104,14 +104,6 @@ jobs:
             exit 1
           }
 
-          ssh -i "$key_path" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o "UserKnownHostsFile=$known_hosts_path" \
-            -o ConnectTimeout=15 \
-            -p "$HERDR_DEPLOY_PORT" \
-            "$HERDR_DEPLOY_USER@$HERDR_DEPLOY_HOST" true
           {
             echo "DEPLOY_SSH_KEY_PATH=$key_path"
             echo "DEPLOY_KNOWN_HOSTS_PATH=$known_hosts_path"
@@ -216,7 +208,8 @@ jobs:
             -p "$HERDR_DEPLOY_PORT"
             "$HERDR_DEPLOY_USER@$HERDR_DEPLOY_HOST"
           )
-          remote_state="$("${ssh_args[@]}" sh -s -- "$HERDR_DEPLOY_PATH" <<'REMOTE'
+          probe_remote() {
+            "${ssh_args[@]}" sh -s -- "$HERDR_DEPLOY_PATH" <<'REMOTE'
           set -eu
           target=$1
           test -x "$target"
@@ -227,7 +220,20 @@ jobs:
           printf '%s\n' "$deployed_sha"
           exec "$target" status server --json
           REMOTE
-          )"
+          }
+          remote_state=
+          for attempt in 1 2 3 4 5; do
+            if remote_state="$(probe_remote)"; then
+              break
+            fi
+            if (( attempt == 5 )); then
+              echo "error: deployment SSH preflight failed after $attempt attempts" >&2
+              exit 1
+            fi
+            delay=$((attempt * 5))
+            echo "::warning::Deployment SSH preflight attempt $attempt failed; retrying in ${delay}s"
+            sleep "$delay"
+          done
           deployed_sha="$(printf '%s\n' "$remote_state" | sed -n '1p')"
           server_json="$(printf '%s\n' "$remote_state" | tail -n +2)"
           if [[ -n "$deployed_sha" && ! "$deployed_sha" =~ ^[0-9a-f]{40}$ ]]; then
