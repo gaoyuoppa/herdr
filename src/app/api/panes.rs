@@ -971,6 +971,52 @@ impl App {
             }
             ResolvedPaneMoveDestination::NewWorkspace { .. } => true,
         };
+        let source_workspace_label = cross_workspace.then(|| {
+            self.state.workspaces[source_ws_idx]
+                .display_name_from(&self.state.terminals, &self.terminal_runtimes)
+        });
+        let workspace_origin_update = if !cross_workspace {
+            PaneWorkspaceOriginUpdate::Unchanged
+        } else if matches!(&resolved, ResolvedPaneMoveDestination::NewWorkspace { .. }) {
+            PaneWorkspaceOriginUpdate::Clear
+        } else {
+            let source_pane = self.state.workspaces[source_ws_idx]
+                .pane_state(source_pane_id)
+                .expect("resolved source pane must have pane state");
+            match (
+                source_pane.origin_workspace_id.as_ref(),
+                source_pane.origin_workspace_label.as_ref(),
+            ) {
+                (Some(_), Some(_)) => PaneWorkspaceOriginUpdate::Unchanged,
+                (None, Some(origin_workspace_label)) => PaneWorkspaceOriginUpdate::Set {
+                    workspace_id: crate::pane::legacy_origin_workspace_id(origin_workspace_label),
+                    label: origin_workspace_label.clone(),
+                },
+                (Some(origin_workspace_id), None) => {
+                    let origin_workspace_label = self
+                        .state
+                        .workspaces
+                        .iter()
+                        .find(|workspace| workspace.id == *origin_workspace_id)
+                        .map(|workspace| {
+                            workspace
+                                .display_name_from(&self.state.terminals, &self.terminal_runtimes)
+                        })
+                        .or_else(|| source_workspace_label.clone())
+                        .unwrap_or_else(|| "workspace".into());
+                    PaneWorkspaceOriginUpdate::Set {
+                        workspace_id: origin_workspace_id.clone(),
+                        label: origin_workspace_label,
+                    }
+                }
+                (None, None) => PaneWorkspaceOriginUpdate::Set {
+                    workspace_id: previous_workspace_id.clone(),
+                    label: source_workspace_label
+                        .clone()
+                        .unwrap_or_else(|| "workspace".into()),
+                },
+            }
+        };
         let previous_focus = self.state.current_pane_focus_target();
         let taken = match self
             .state
@@ -992,6 +1038,8 @@ impl App {
             cross_workspace,
             self.state.active,
             self.state.selected,
+            workspace_origin_update,
+            source_workspace_label,
         );
         if let Err(error) = transaction.insert(self, resolved, &source_terminal_id, focus) {
             let rollback_error = transaction.rollback(self).err();
@@ -1922,6 +1970,12 @@ enum PaneMoveFailurePoint {
     AfterTargetInsert,
 }
 
+enum PaneWorkspaceOriginUpdate {
+    Unchanged,
+    Set { workspace_id: String, label: String },
+    Clear,
+}
+
 struct PaneMoveTransaction {
     source_workspace_id: String,
     source_pane_id: PaneId,
@@ -1933,6 +1987,8 @@ struct PaneMoveTransaction {
     target: Option<PaneMoveTarget>,
     previous_active: Option<usize>,
     previous_selected: usize,
+    workspace_origin_update: PaneWorkspaceOriginUpdate,
+    source_workspace_label: Option<String>,
 }
 
 #[derive(Clone)]
@@ -2000,6 +2056,8 @@ impl PaneMoveTransaction {
         cross_workspace: bool,
         previous_active: Option<usize>,
         previous_selected: usize,
+        workspace_origin_update: PaneWorkspaceOriginUpdate,
+        source_workspace_label: Option<String>,
     ) -> Self {
         Self {
             source_workspace_id,
@@ -2012,6 +2070,8 @@ impl PaneMoveTransaction {
             target: None,
             previous_active,
             previous_selected,
+            workspace_origin_update,
+            source_workspace_label,
         }
     }
 
@@ -2246,9 +2306,38 @@ impl PaneMoveTransaction {
             app.state
                 .public_pane_id_aliases
                 .insert(previous_pane_id, self.source_pane_id);
+            if let Some(pane) = app.state.workspaces[verified.target_ws_idx].tabs
+                [verified.target_tab_idx]
+                .panes
+                .get_mut(&verified.target.pane_id)
+            {
+                match &self.workspace_origin_update {
+                    PaneWorkspaceOriginUpdate::Unchanged => {}
+                    PaneWorkspaceOriginUpdate::Set {
+                        workspace_id,
+                        label,
+                    } => {
+                        pane.origin_workspace_id = Some(workspace_id.clone());
+                        pane.origin_workspace_label = Some(label.clone());
+                    }
+                    PaneWorkspaceOriginUpdate::Clear => {
+                        pane.origin_workspace_id = None;
+                        pane.origin_workspace_label = None;
+                    }
+                }
+            }
         }
 
-        let closed_workspace_id = if self.source_workspace_empty && self.cross_workspace {
+        let source_empty = self.source_workspace_empty;
+        if source_empty && self.cross_workspace {
+            if let Some(source_workspace_label) = self.source_workspace_label.as_ref() {
+                app.state.refresh_origin_workspace_label(
+                    &self.source_workspace_id,
+                    source_workspace_label,
+                );
+            }
+        }
+        let closed_workspace_id = if source_empty && self.cross_workspace {
             let workspace_id = self.source_workspace_id.clone();
             remove_workspace_after_pane_move(&mut app.state, verified.source_ws_idx);
             Some(workspace_id)
@@ -3261,6 +3350,16 @@ mod tests {
         app.state.workspaces.push(Workspace::test_new("target"));
         let source = app.state.workspaces[0].tabs[0].root_pane;
         let target = app.state.workspaces[1].tabs[0].root_pane;
+        app.state.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&source)
+            .expect("source pane")
+            .origin_workspace_id = Some("w-original".into());
+        app.state.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&source)
+            .expect("source pane")
+            .origin_workspace_label = Some("original".into());
         app.state.workspaces[0].tabs[0].custom_name = Some("source-tab".into());
         app.state.workspaces[0].tabs[0].number = 9;
         app.state.workspaces[0].next_public_tab_number = 10;
@@ -3330,6 +3429,17 @@ mod tests {
         assert_eq!(app.state.workspaces[1].tabs[0].layout, target_layout);
         assert_eq!(app.state.active, Some(1));
         assert_eq!(app.state.selected, 1);
+        let restored_pane = app.state.workspaces[0]
+            .pane_state(source)
+            .expect("restored pane");
+        assert_eq!(
+            restored_pane.origin_workspace_id.as_deref(),
+            Some("w-original")
+        );
+        assert_eq!(
+            restored_pane.origin_workspace_label.as_deref(),
+            Some("original")
+        );
         assert!(app.event_hub.events_after(0).is_empty());
         app.state.assert_invariants_for_test();
     }
@@ -3455,6 +3565,8 @@ mod tests {
     fn api_pane_move_to_existing_tab_across_workspace_reassigns_public_pane_id() {
         let mut app = app_with_linked_worktree();
         app.state.workspaces.push(Workspace::test_new("other"));
+        app.state.workspaces[0].custom_name = Some("source-space".into());
+        app.state.workspaces[1].custom_name = Some("target-space".into());
         let source = app.state.workspaces[0].tabs[0].root_pane;
         let source_terminal = app.state.workspaces[0].tabs[0]
             .terminal_id(source)
@@ -3494,7 +3606,10 @@ mod tests {
         assert!(move_result.changed);
         assert_eq!(move_result.previous_pane_id, previous_pane_id);
         assert_eq!(move_result.previous_workspace_id, previous_workspace_id);
-        assert_eq!(move_result.closed_workspace_id, Some(previous_workspace_id));
+        assert_eq!(
+            move_result.closed_workspace_id,
+            Some(previous_workspace_id.clone())
+        );
         assert_ne!(move_result.pane.pane_id, move_result.previous_pane_id);
         assert!(move_result
             .pane
@@ -3504,6 +3619,17 @@ mod tests {
         assert_eq!(move_result.pane.tab_id, target_tab_id);
         assert_eq!(move_result.pane.terminal_id, source_terminal.to_string());
         assert_eq!(app.state.workspaces.len(), 1);
+        let moved_pane = app.state.workspaces[0]
+            .pane_state(source)
+            .expect("moved pane state");
+        assert_eq!(
+            moved_pane.origin_workspace_id.as_deref(),
+            Some(previous_workspace_id.as_str())
+        );
+        assert_eq!(
+            moved_pane.origin_workspace_label.as_deref(),
+            Some("source-space")
+        );
         assert_eq!(
             app.state.workspaces[0].tabs[0].terminal_id(source),
             Some(&source_terminal)
@@ -3514,6 +3640,87 @@ mod tests {
             Err(crate::app::terminal_targets::TerminalTargetError::NotFound { .. })
         ));
         assert!(app.resolve_agent_target(&move_result.pane.pane_id).is_ok());
+    }
+
+    #[test]
+    fn api_chained_cross_workspace_moves_preserve_the_first_origin() {
+        let mut app = app_with_linked_worktree();
+        app.state.workspaces[0].custom_name = Some("source-space".into());
+        let source = app.state.workspaces[0].tabs[0].root_pane;
+        let _source_sibling =
+            app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.state.workspaces[0].tabs[0].layout.focus_pane(source);
+        app.state.workspaces.push(Workspace::test_new("middle"));
+        app.state.workspaces.push(Workspace::test_new("target"));
+        seed_terminal_states(&mut app);
+        let original_workspace_id = app.public_workspace_id(0);
+        let source_public = app.public_pane_id(0, source).expect("source pane");
+        let middle_target = app.state.workspaces[1].tabs[0].root_pane;
+        let middle_tab = app.public_tab_id(1, 0).expect("middle tab");
+        let middle_pane = app
+            .public_pane_id(1, middle_target)
+            .expect("middle target pane");
+
+        let first_response = app.handle_pane_move(
+            "first".into(),
+            PaneMoveParams {
+                pane_id: source_public,
+                destination: PaneMoveDestination::Tab {
+                    tab_id: middle_tab,
+                    target_pane_id: Some(middle_pane),
+                    split: SplitDirection::Right,
+                    ratio: None,
+                },
+                focus: false,
+            },
+        );
+        let first: SuccessResponse = serde_json::from_str(&first_response).unwrap();
+        let ResponseResult::PaneMove {
+            move_result: first_move,
+        } = first.result
+        else {
+            panic!("expected first pane move");
+        };
+        let target_pane = app.state.workspaces[2].tabs[0].root_pane;
+        let target_tab = app.public_tab_id(2, 0).expect("target tab");
+        let target_public = app.public_pane_id(2, target_pane).expect("target pane");
+
+        let second_response = app.handle_pane_move(
+            "second".into(),
+            PaneMoveParams {
+                pane_id: first_move.pane.pane_id,
+                destination: PaneMoveDestination::Tab {
+                    tab_id: target_tab,
+                    target_pane_id: Some(target_public),
+                    split: SplitDirection::Down,
+                    ratio: None,
+                },
+                focus: false,
+            },
+        );
+        let second: SuccessResponse = serde_json::from_str(&second_response).unwrap();
+        let ResponseResult::PaneMove {
+            move_result: second_move,
+        } = second.result
+        else {
+            panic!("expected second pane move");
+        };
+
+        let (target_ws_idx, moved_pane_id) = app
+            .parse_pane_id(&second_move.pane.pane_id)
+            .expect("moved pane target");
+        let moved_pane = app.state.workspaces[target_ws_idx]
+            .pane_state(moved_pane_id)
+            .expect("moved pane state");
+        assert_eq!(
+            moved_pane.origin_workspace_id.as_deref(),
+            Some(original_workspace_id.as_str())
+        );
+        assert_eq!(
+            moved_pane.origin_workspace_label.as_deref(),
+            Some("source-space")
+        );
+        assert_eq!(app.state.workspaces.len(), 3);
     }
 
     #[test]
@@ -3680,6 +3887,16 @@ mod tests {
     fn api_pane_move_to_new_workspace_closes_empty_source_workspace() {
         let mut app = app_with_linked_worktree();
         let source = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&source)
+            .expect("source pane")
+            .origin_workspace_id = Some("w-original".into());
+        app.state.workspaces[0].tabs[0]
+            .panes
+            .get_mut(&source)
+            .expect("source pane")
+            .origin_workspace_label = Some("original".into());
         let source_terminal = app.state.workspaces[0].tabs[0]
             .terminal_id(source)
             .unwrap()
@@ -3731,6 +3948,11 @@ mod tests {
         assert_ne!(move_result.pane.pane_id, source_public);
         assert_eq!(move_result.pane.terminal_id, source_terminal.to_string());
         assert_eq!(app.state.workspaces.len(), 1);
+        let promoted_pane = app.state.workspaces[0]
+            .pane_state(source)
+            .expect("promoted pane state");
+        assert_eq!(promoted_pane.origin_workspace_id, None);
+        assert_eq!(promoted_pane.origin_workspace_label, None);
         assert_eq!(
             app.state.workspaces[0].tabs[0].terminal_id(source),
             Some(&source_terminal)

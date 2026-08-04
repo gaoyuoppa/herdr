@@ -1425,9 +1425,20 @@ impl Workspace {
 
     pub(crate) fn test_split(&mut self, direction: Direction) -> PaneId {
         let tab = self.active_tab_mut().expect("workspace must have tab");
+        let focused_pane = tab.layout.focused();
+        let inherited_workspace_origin = tab.panes.get(&focused_pane).map(|pane| {
+            (
+                pane.origin_workspace_id.clone(),
+                pane.origin_workspace_label.clone(),
+            )
+        });
         let new_id = tab.layout.split_focused(direction);
-        tab.panes
-            .insert(new_id, PaneState::new(TerminalId::alloc()));
+        let mut pane_state = PaneState::new(TerminalId::alloc());
+        if let Some((origin_workspace_id, origin_workspace_label)) = inherited_workspace_origin {
+            pane_state.origin_workspace_id = origin_workspace_id;
+            pane_state.origin_workspace_label = origin_workspace_label;
+        }
+        tab.panes.insert(new_id, pane_state);
         self.register_new_pane(new_id);
         new_id
     }
@@ -1634,6 +1645,24 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn split_pane_inherits_logical_workspace_origin() {
+        let mut workspace = Workspace::test_new("host");
+        let root = workspace.tabs[0].root_pane;
+        let root_state = workspace.tabs[0].panes.get_mut(&root).expect("root pane");
+        root_state.origin_workspace_id = Some("w-origin".into());
+        root_state.origin_workspace_label = Some("origin".into());
+
+        let split = workspace.test_split(Direction::Horizontal);
+
+        let split_state = workspace.pane_state(split).expect("split pane");
+        assert_eq!(split_state.origin_workspace_id.as_deref(), Some("w-origin"));
+        assert_eq!(
+            split_state.origin_workspace_label.as_deref(),
+            Some("origin")
+        );
+    }
 
     #[test]
     fn generated_workspace_ids_are_short_base32_handles() {

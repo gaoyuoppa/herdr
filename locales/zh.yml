@@ -479,6 +479,7 @@ state:
   layout_preset_main_left: "主窗格居左"
   layout_preset_main_top: "主窗格居上"
   pane_transfer_title: "移动窗格"
+  pane_transfer_move: "移动"
   pane_transfer_new_tab: "新标签页"
   pane_transfer_new_workspace: "新工作区"
   pane_transfer_failed: "窗格移动失败"

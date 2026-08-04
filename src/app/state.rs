@@ -628,6 +628,16 @@ pub struct WorkspaceCardArea {
     pub indented: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OriginWorkspaceCardArea {
+    /// Physical workspace that currently hosts the representative pane.
+    pub ws_idx: usize,
+    pub pane_id: PaneId,
+    /// Stable position in the combined physical + origin workspace list.
+    pub entry_idx: usize,
+    pub rect: Rect,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorktreeCreateState {
     pub source_workspace_id: String,
@@ -803,6 +813,7 @@ pub struct ViewState {
     pub layout: ViewLayout,
     pub sidebar_rect: Rect,
     pub workspace_card_areas: Vec<WorkspaceCardArea>,
+    pub origin_workspace_card_areas: Vec<OriginWorkspaceCardArea>,
     pub tab_bar_rect: Rect,
     pub tab_hit_areas: Vec<Rect>,
     pub tab_scroll_left_hit_area: Rect,
@@ -1883,31 +1894,39 @@ impl AppState {
         else {
             return Vec::new();
         };
-        let mut candidates = Vec::new();
-        if self
-            .workspaces
-            .iter()
-            .any(|workspace| workspace.id == source.workspace_id)
-        {
-            candidates.push(PaneTransferCandidate {
-                destination: PaneTransferDestination::NewTab {
-                    workspace_id: source.workspace_id.clone(),
-                },
-            });
-        }
-        candidates.push(PaneTransferCandidate {
-            destination: PaneTransferDestination::NewWorkspace,
+        let source_can_detach_to_new_tab = self
+            .resolve_pane_transfer_source(source)
+            .and_then(|(ws_idx, tab_idx, _)| {
+                self.workspaces
+                    .get(ws_idx)?
+                    .tabs
+                    .get(tab_idx)
+                    .map(|tab| tab.layout.pane_count() > 1)
+            })
+            .unwrap_or(false);
+        let selected_edge = self.pane_layout.as_ref().and_then(|layout| {
+            let PaneLayoutInteraction::Transfer(transfer) = &layout.interaction else {
+                return None;
+            };
+            let PaneTransferDestination::PaneEdge {
+                workspace_id,
+                tab_id,
+                pane_id,
+                placement,
+            } = transfer.selected.as_ref()?
+            else {
+                return None;
+            };
+            Some((
+                workspace_id.as_str(),
+                tab_id.as_str(),
+                pane_id.as_str(),
+                *placement,
+            ))
         });
-        candidates.extend(
-            self.workspaces
-                .iter()
-                .filter(|workspace| workspace.id != source.workspace_id)
-                .map(|workspace| PaneTransferCandidate {
-                    destination: PaneTransferDestination::NewTab {
-                        workspace_id: workspace.id.clone(),
-                    },
-                }),
-        );
+        let mut candidates = vec![PaneTransferCandidate {
+            destination: PaneTransferDestination::NewWorkspace,
+        }];
         for workspace in &self.workspaces {
             for tab in &workspace.tabs {
                 if tab.zoomed {
@@ -1924,24 +1943,43 @@ impl AppState {
                     }
                     let tab_id =
                         crate::workspace::public_tab_id_for_number(&workspace.id, tab.number);
-                    for placement in [
-                        crate::layout::PanePlacement::Left,
-                        crate::layout::PanePlacement::Right,
-                        crate::layout::PanePlacement::Up,
-                        crate::layout::PanePlacement::Down,
-                    ] {
-                        candidates.push(PaneTransferCandidate {
-                            destination: PaneTransferDestination::PaneEdge {
-                                workspace_id: workspace.id.clone(),
-                                tab_id: tab_id.clone(),
-                                pane_id: pane_id.clone(),
-                                placement,
-                            },
-                        });
-                    }
+                    let placement = match selected_edge {
+                        Some((
+                            selected_workspace_id,
+                            selected_tab_id,
+                            selected_pane_id,
+                            placement,
+                        )) if selected_workspace_id == workspace.id.as_str()
+                            && selected_tab_id == tab_id.as_str()
+                            && selected_pane_id == pane_id.as_str() =>
+                        {
+                            placement
+                        }
+                        _ => crate::layout::PanePlacement::Right,
+                    };
+                    candidates.push(PaneTransferCandidate {
+                        destination: PaneTransferDestination::PaneEdge {
+                            workspace_id: workspace.id.clone(),
+                            tab_id,
+                            pane_id,
+                            placement,
+                        },
+                    });
                 }
             }
         }
+        candidates.extend(
+            self.workspaces
+                .iter()
+                .filter(|workspace| {
+                    workspace.id != source.workspace_id || source_can_detach_to_new_tab
+                })
+                .map(|workspace| PaneTransferCandidate {
+                    destination: PaneTransferDestination::NewTab {
+                        workspace_id: workspace.id.clone(),
+                    },
+                }),
+        );
         candidates
     }
 
@@ -2336,6 +2374,7 @@ impl AppState {
                 layout: ViewLayout::Desktop,
                 sidebar_rect: Rect::default(),
                 workspace_card_areas: Vec::new(),
+                origin_workspace_card_areas: Vec::new(),
                 tab_bar_rect: Rect::default(),
                 tab_hit_areas: Vec::new(),
                 tab_scroll_left_hit_area: Rect::default(),
@@ -2902,14 +2941,15 @@ mod tests {
     }
 
     #[test]
-    fn pane_transfer_detach_targets_stay_ahead_of_many_split_moves() {
+    fn pane_transfer_lists_every_open_session_once_after_new_workspace() {
         let mut state = AppState::test_new();
-        let mut workspace = crate::workspace::Workspace::test_new("many-panes");
-        let source_pane_id = workspace.tabs[0].root_pane;
-        workspace.test_split(ratatui::layout::Direction::Horizontal);
-        workspace.test_split(ratatui::layout::Direction::Vertical);
-        workspace.test_split(ratatui::layout::Direction::Horizontal);
-        state.workspaces = vec![workspace];
+        let mut source_workspace = crate::workspace::Workspace::test_new("source");
+        let source_pane_id = source_workspace.tabs[0].root_pane;
+        source_workspace.test_split(ratatui::layout::Direction::Horizontal);
+        let target_workspace = crate::workspace::Workspace::test_new("target");
+        let mut split_workspace = crate::workspace::Workspace::test_new("split-target");
+        split_workspace.test_split(ratatui::layout::Direction::Vertical);
+        state.workspaces = vec![source_workspace, target_workspace, split_workspace];
         let source = state
             .pane_transfer_source(0, 0, source_pane_id)
             .expect("transfer source");
@@ -2926,23 +2966,111 @@ mod tests {
 
         let candidates = state.pane_transfer_candidates();
 
-        assert!(
-            candidates.len() > 10,
-            "fixture must overflow the visible picker rows"
-        );
         assert!(matches!(
             &candidates[0].destination,
-            PaneTransferDestination::NewTab { workspace_id }
-                if workspace_id == &source.workspace_id
-        ));
-        assert!(matches!(
-            &candidates[1].destination,
             PaneTransferDestination::NewWorkspace
         ));
-        assert!(candidates[2..].iter().all(|candidate| matches!(
+        let split_targets = candidates
+            .iter()
+            .filter_map(|candidate| match &candidate.destination {
+                PaneTransferDestination::PaneEdge {
+                    workspace_id,
+                    tab_id,
+                    pane_id,
+                    placement,
+                } => Some((
+                    workspace_id.clone(),
+                    tab_id.clone(),
+                    pane_id.clone(),
+                    *placement,
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            split_targets.len(),
+            4,
+            "every open pane except the source should appear exactly once"
+        );
+        assert!(split_targets
+            .iter()
+            .all(|(_, _, _, placement)| *placement == crate::layout::PanePlacement::Right));
+        let unique_targets = split_targets
+            .iter()
+            .map(|(workspace_id, tab_id, pane_id, _)| {
+                (workspace_id.clone(), tab_id.clone(), pane_id.clone())
+            })
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(unique_targets.len(), split_targets.len());
+        assert!(split_targets
+            .iter()
+            .all(|(_, _, pane_id, _)| pane_id != &source.pane_id));
+
+        let first_new_tab = candidates
+            .iter()
+            .position(|candidate| {
+                matches!(
+                    candidate.destination,
+                    PaneTransferDestination::NewTab { .. }
+                )
+            })
+            .expect("new-tab destinations");
+        assert_eq!(first_new_tab, 1 + split_targets.len());
+        assert!(candidates[1..first_new_tab]
+            .iter()
+            .all(|candidate| matches!(
+                candidate.destination,
+                PaneTransferDestination::PaneEdge { .. }
+            )));
+        assert!(candidates[first_new_tab..].iter().all(|candidate| matches!(
             candidate.destination,
-            PaneTransferDestination::PaneEdge { .. }
+            PaneTransferDestination::NewTab { .. }
         )));
+        assert_eq!(
+            candidates[first_new_tab..].len(),
+            state.workspaces.len(),
+            "each workspace should retain a new-tab detach destination"
+        );
+    }
+
+    #[test]
+    fn pane_transfer_omits_noop_new_tab_for_single_pane_source_workspace() {
+        let mut state = AppState::test_new();
+        let source_workspace = crate::workspace::Workspace::test_new("source");
+        let source_workspace_id = source_workspace.id.clone();
+        let source_pane_id = source_workspace.tabs[0].root_pane;
+        let target_workspace = crate::workspace::Workspace::test_new("target");
+        let target_workspace_id = target_workspace.id.clone();
+        state.workspaces = vec![source_workspace, target_workspace];
+        let source = state
+            .pane_transfer_source(0, 0, source_pane_id)
+            .expect("transfer source");
+        state.pane_layout = Some(PaneLayoutInteractionState {
+            ws_idx: 0,
+            tab_idx: 0,
+            source_pane_id,
+            interaction: PaneLayoutInteraction::Transfer(PaneTransferState {
+                source,
+                origin: PaneTransferOrigin::ContextMenu,
+                selected: None,
+            }),
+        });
+
+        let new_tab_workspace_ids = state
+            .pane_transfer_candidates()
+            .into_iter()
+            .filter_map(|candidate| match candidate.destination {
+                PaneTransferDestination::NewTab { workspace_id } => Some(workspace_id),
+                PaneTransferDestination::PaneEdge { .. }
+                | PaneTransferDestination::NewWorkspace => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(new_tab_workspace_ids, vec![target_workspace_id]);
+        assert!(
+            !new_tab_workspace_ids.contains(&source_workspace_id),
+            "moving a tab's only pane to a new tab in the same workspace is a no-op"
+        );
     }
 
     fn navigator_row_for_display(is_workspace: bool) -> NavigatorRow {

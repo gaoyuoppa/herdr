@@ -639,6 +639,11 @@ impl AppState {
                         }
                     }
 
+                    if let Some((ws_idx, pane_id)) = self.origin_workspace_pane_at_row(mouse.row) {
+                        self.mode = Mode::Terminal;
+                        return Some(MouseAction::FocusPane { ws_idx, pane_id });
+                    }
+
                     if let Some(idx) = self.workspace_at_row(mouse.row) {
                         self.workspace_press = Some(WorkspacePressState {
                             ws_idx: idx,

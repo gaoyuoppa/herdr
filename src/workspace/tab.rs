@@ -362,6 +362,12 @@ impl Tab {
         command: Option<SplitCommand<'_>>,
     ) -> std::io::Result<NewPane> {
         let previous_focus = self.layout.focused();
+        let inherited_workspace_origin = self.panes.get(&previous_focus).map(|pane| {
+            (
+                pane.origin_workspace_id.clone(),
+                pane.origin_workspace_label.clone(),
+            )
+        });
         let new_id = match ratio {
             Some(ratio) => self.layout.split_focused_with_ratio(direction, ratio),
             None => self.layout.split_focused(direction),
@@ -437,7 +443,12 @@ impl Tab {
             }
             None => TerminalState::new(terminal_id.clone(), actual_cwd),
         };
-        self.panes.insert(new_id, PaneState::new(terminal_id));
+        let mut pane_state = PaneState::new(terminal_id);
+        if let Some((origin_workspace_id, origin_workspace_label)) = inherited_workspace_origin {
+            pane_state.origin_workspace_id = origin_workspace_id;
+            pane_state.origin_workspace_label = origin_workspace_label;
+        }
+        self.panes.insert(new_id, pane_state);
         self.zoomed = false;
         Ok(NewPane {
             pane_id: new_id,

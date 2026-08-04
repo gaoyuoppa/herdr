@@ -1664,6 +1664,32 @@ impl AppState {
         }
     }
 
+    pub(crate) fn refresh_origin_workspace_label(&mut self, workspace_id: &str, label: &str) {
+        for workspace in &mut self.workspaces {
+            for tab in &mut workspace.tabs {
+                for pane in tab.panes.values_mut() {
+                    if pane.origin_workspace_id.as_deref() == Some(workspace_id) {
+                        pane.origin_workspace_label = Some(label.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    fn ensure_origin_workspace_label(&mut self, workspace_id: &str, label: &str) {
+        for workspace in &mut self.workspaces {
+            for tab in &mut workspace.tabs {
+                for pane in tab.panes.values_mut() {
+                    if pane.origin_workspace_id.as_deref() == Some(workspace_id)
+                        && pane.origin_workspace_label.is_none()
+                    {
+                        pane.origin_workspace_label = Some(label.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     pub fn close_selected_workspace(&mut self) {
         if self.workspaces.is_empty() {
             return;
@@ -1703,6 +1729,25 @@ impl AppState {
             .active
             .and_then(|idx| self.workspaces.get(idx))
             .map(|ws| ws.id.clone());
+        let closing_workspace_labels = close_indices
+            .iter()
+            .filter_map(|idx| {
+                self.workspaces.get(*idx).map(|workspace| {
+                    (
+                        workspace.id.clone(),
+                        workspace.display_name_from_terminals(&self.terminals),
+                        workspace.custom_name.is_some(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        for (workspace_id, label, label_is_authoritative) in closing_workspace_labels {
+            if label_is_authoritative {
+                self.refresh_origin_workspace_label(&workspace_id, &label);
+            } else {
+                self.ensure_origin_workspace_label(&workspace_id, &label);
+            }
+        }
         self.remove_plugin_pane_records(pane_ids);
         for idx in close_indices.iter().rev() {
             self.workspaces.remove(*idx);
@@ -3329,6 +3374,20 @@ impl AppState {
         self.mark_session_dirty();
 
         if should_close_workspace {
+            let closing_workspace_origin = self.workspaces.get(ws_idx).map(|workspace| {
+                (
+                    workspace.id.clone(),
+                    workspace.display_name_from_terminals(&self.terminals),
+                    workspace.custom_name.is_some(),
+                )
+            });
+            if let Some((workspace_id, label, label_is_authoritative)) = closing_workspace_origin {
+                if label_is_authoritative {
+                    self.refresh_origin_workspace_label(&workspace_id, &label);
+                } else {
+                    self.ensure_origin_workspace_label(&workspace_id, &label);
+                }
+            }
             let active_workspace_id = self
                 .active
                 .and_then(|idx| self.workspaces.get(idx))
@@ -4602,6 +4661,57 @@ mod tests {
     }
 
     #[test]
+    fn close_workspace_refreshes_hosted_pane_origin_label() {
+        let mut state = app_with_workspaces(&["source-current", "host"]);
+        let source_id = state.workspaces[0].id.clone();
+        let hosted_pane = state.workspaces[1].tabs[0].root_pane;
+        let hosted_state = state.workspaces[1].tabs[0]
+            .panes
+            .get_mut(&hosted_pane)
+            .expect("hosted pane");
+        hosted_state.origin_workspace_id = Some(source_id);
+        hosted_state.origin_workspace_label = Some("source-stale".into());
+        state.selected = 0;
+        state.active = Some(1);
+
+        state.close_selected_workspace();
+
+        let hosted_state = state.workspaces[0]
+            .pane_state(hosted_pane)
+            .expect("remaining hosted pane");
+        assert_eq!(
+            hosted_state.origin_workspace_label.as_deref(),
+            Some("source-current")
+        );
+    }
+
+    #[test]
+    fn auto_named_workspace_close_preserves_runtime_aware_origin_fallback() {
+        let mut state = app_with_workspaces(&["source-stale", "host"]);
+        state.workspaces[0].custom_name = None;
+        let source_id = state.workspaces[0].id.clone();
+        let hosted_pane = state.workspaces[1].tabs[0].root_pane;
+        let hosted_state = state.workspaces[1].tabs[0]
+            .panes
+            .get_mut(&hosted_pane)
+            .expect("hosted pane");
+        hosted_state.origin_workspace_id = Some(source_id);
+        hosted_state.origin_workspace_label = Some("runtime-current".into());
+        state.selected = 0;
+        state.active = Some(1);
+
+        state.close_selected_workspace();
+
+        let hosted_state = state.workspaces[0]
+            .pane_state(hosted_pane)
+            .expect("remaining hosted pane");
+        assert_eq!(
+            hosted_state.origin_workspace_label.as_deref(),
+            Some("runtime-current")
+        );
+    }
+
+    #[test]
     fn close_parent_worktree_workspace_closes_group() {
         let mut state = app_with_workspaces(&["main", "issue", "notes"]);
         state.workspaces[0].worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
@@ -4707,6 +4817,30 @@ mod tests {
         assert_eq!(state.workspaces.len(), 1);
         assert_eq!(state.workspaces[0].custom_name.as_deref(), Some("b"));
         state.assert_invariants_for_test();
+    }
+
+    #[test]
+    fn pane_died_refreshes_hosted_pane_origin_label_before_workspace_removal() {
+        let mut state = app_with_workspaces(&["source-current", "host"]);
+        let source_id = state.workspaces[0].id.clone();
+        let dead_pane = state.workspaces[0].tabs[0].root_pane;
+        let hosted_pane = state.workspaces[1].tabs[0].root_pane;
+        let hosted_state = state.workspaces[1].tabs[0]
+            .panes
+            .get_mut(&hosted_pane)
+            .expect("hosted pane");
+        hosted_state.origin_workspace_id = Some(source_id);
+        hosted_state.origin_workspace_label = Some("source-stale".into());
+
+        state.handle_pane_died(dead_pane);
+
+        let hosted_state = state.workspaces[0]
+            .pane_state(hosted_pane)
+            .expect("remaining hosted pane");
+        assert_eq!(
+            hosted_state.origin_workspace_label.as_deref(),
+            Some("source-current")
+        );
     }
 
     #[test]
