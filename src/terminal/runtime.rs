@@ -585,47 +585,6 @@ impl TerminalRuntime {
 }
 
 #[cfg(test)]
-mod tests {
-    use crossterm::event::KeyModifiers;
-
-    use super::*;
-
-    #[test]
-    fn host_scroll_action_respects_modifier_priority() {
-        let metrics = crate::pane::ScrollMetrics {
-            offset_from_bottom: 12,
-            max_offset_from_bottom: 4255,
-            viewport_rows: 61,
-        };
-        assert_eq!(
-            host_scroll_action(HostScrollDirection::Up, KeyModifiers::empty(), 3, metrics),
-            HostScrollAction::LinesUp(3)
-        );
-        assert_eq!(
-            host_scroll_action(HostScrollDirection::Up, KeyModifiers::SHIFT, 3, metrics),
-            HostScrollAction::LinesUp(60)
-        );
-        assert_eq!(
-            host_scroll_action(
-                HostScrollDirection::Up,
-                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-                3,
-                metrics
-            ),
-            HostScrollAction::Oldest
-        );
-        assert_eq!(
-            host_scroll_action(HostScrollDirection::Down, KeyModifiers::SUPER, 3, metrics),
-            HostScrollAction::Live
-        );
-        assert_eq!(
-            host_scroll_action(HostScrollDirection::Up, KeyModifiers::META, 0, metrics),
-            HostScrollAction::Oldest
-        );
-    }
-}
-
-#[cfg(test)]
 impl TerminalRuntime {
     pub(crate) fn test_with_channel(cols: u16, rows: u16) -> (Self, mpsc::Receiver<Bytes>) {
         let (runtime, rx) = crate::pane::PaneRuntime::test_with_channel(cols, rows);
@@ -690,5 +649,46 @@ impl TerminalRuntime {
         let (runtime, nudge_count) =
             crate::pane::PaneRuntime::test_with_handoff_repaint_needed(needed);
         (Self(runtime), nudge_count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::KeyModifiers;
+
+    use super::*;
+
+    #[test]
+    fn host_scroll_action_respects_modifier_priority() {
+        let metrics = crate::pane::ScrollMetrics {
+            offset_from_bottom: 12,
+            max_offset_from_bottom: 4255,
+            viewport_rows: 61,
+        };
+        assert_eq!(
+            host_scroll_action(HostScrollDirection::Up, KeyModifiers::empty(), 3, metrics),
+            HostScrollAction::LinesUp(3)
+        );
+        assert_eq!(
+            host_scroll_action(HostScrollDirection::Up, KeyModifiers::SHIFT, 3, metrics),
+            HostScrollAction::LinesUp(60)
+        );
+        assert_eq!(
+            host_scroll_action(
+                HostScrollDirection::Up,
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                3,
+                metrics
+            ),
+            HostScrollAction::Oldest
+        );
+        assert_eq!(
+            host_scroll_action(HostScrollDirection::Down, KeyModifiers::SUPER, 3, metrics),
+            HostScrollAction::Live
+        );
+        assert_eq!(
+            host_scroll_action(HostScrollDirection::Up, KeyModifiers::META, 0, metrics),
+            HostScrollAction::Oldest
+        );
     }
 }
