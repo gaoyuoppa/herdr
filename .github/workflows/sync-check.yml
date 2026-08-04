@@ -1,0 +1,121 @@
+name: Hourly upstream sync check
+
+# 每小时同步检查（UTC 17 分触发）：仅同步上游 master 到 fork，检测是否有
+# 待部署变更，不做构建、不部署。部署只在每天 08:00 / 24:00（北京时间）由
+# sync-build-deploy.yml 执行。上游有更新时的微信提醒由 Hermes 侧脚本负责。
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: herdr-upstream-sync-build-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CUSTOM_BRANCH: deploy/zh-with-perf
+  UPSTREAM_REPOSITORY: herdrdev/herdr
+
+jobs:
+  sync-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the custom branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CUSTOM_BRANCH }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Initialize sync context
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "FAILURE_STAGE=sync-initialization"
+            echo "FAILURE_SUMMARY=hourly sync check initialization failed"
+            echo "UPSTREAM_SHA=unknown"
+            echo "CUSTOM_SHA=unknown"
+          } >> "$GITHUB_ENV"
+
+      - name: Fetch the fork and upstream master
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "FAILURE_STAGE=fetch"
+            echo "FAILURE_SUMMARY=fetching the fork or upstream master failed"
+          } >> "$GITHUB_ENV"
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream "https://github.com/$UPSTREAM_REPOSITORY.git"
+          else
+            git remote add upstream "https://github.com/$UPSTREAM_REPOSITORY.git"
+          fi
+          git remote set-url --push upstream DISABLED
+          git config user.name "herdr-automation[bot]"
+          git config user.email "herdr-automation[bot]@users.noreply.github.com"
+          git fetch --no-tags upstream "+refs/heads/master:refs/remotes/upstream/master"
+          git fetch --no-tags origin \
+            "+refs/heads/master:refs/remotes/origin/master" \
+            "+refs/heads/$CUSTOM_BRANCH:refs/remotes/origin/$CUSTOM_BRANCH"
+
+          upstream_sha="$(git rev-parse refs/remotes/upstream/master)"
+          custom_sha="$(git rev-parse "refs/remotes/origin/$CUSTOM_BRANCH")"
+          {
+            echo "UPSTREAM_SHA=$upstream_sha"
+            echo "CUSTOM_SHA=$custom_sha"
+          } >> "$GITHUB_ENV"
+
+      - name: Mirror upstream master without rewriting history
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "FAILURE_STAGE=mirror-master"
+            echo "FAILURE_SUMMARY=fork master could not be fast-forwarded to upstream master"
+          } >> "$GITHUB_ENV"
+          if ! git merge-base --is-ancestor refs/remotes/origin/master refs/remotes/upstream/master; then
+            echo "error: fork master diverged from upstream; refusing to force-push" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse refs/remotes/origin/master)" != "$UPSTREAM_SHA" ]]; then
+            git push origin "refs/remotes/upstream/master:refs/heads/master"
+          fi
+
+      - name: Detect pending upstream change
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git merge-base --is-ancestor "$UPSTREAM_SHA" "$CUSTOM_SHA"; then
+            echo "### Herdr hourly sync" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "Upstream is up to date; nothing pending." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Herdr hourly sync" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "Upstream has new commits not yet on \`$CUSTOM_BRANCH\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "Deployment will happen at the next window (Beijing 08:00 / 24:00); WeChat reminder is sent by the Hermes side." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Update the unique automation failure issue
+        if: failure()
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/herdr_automation_issue.py \
+            --repository "$GITHUB_REPOSITORY" \
+            failure \
+            --stage "${FAILURE_STAGE:-unknown}" \
+            --upstream-sha "${UPSTREAM_SHA:-unknown}" \
+            --custom-sha "${CUSTOM_SHA:-unknown}" \
+            --summary "${FAILURE_SUMMARY:-hourly sync check failed; inspect the workflow log}" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

@@ -1,8 +1,11 @@
 name: Sync upstream, build, and deploy
 
+# 部署窗口（北京时间）：08:00 / 24:00（次日0点），对应 UTC 00:00 / 16:00。
+# GitHub Actions 的 schedule 触发可能有 5-15 分钟延迟。
+# 每小时的上游同步检查由 sync-check.yml 负责（只同步不部署）。
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "0 0,16 * * *"
   workflow_dispatch:
 
 concurrency:
