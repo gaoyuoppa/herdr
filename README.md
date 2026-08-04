@@ -1,86 +1,120 @@
 # herdr
 
-
 <p align="center">
   <img src="assets/logo.png" alt="herdr" width="100" />
 </p>
 
 <p align="center">
-  <a href="https://herdr.dev">herdr.dev</a> · <a href="#install">install</a> · <a href="https://herdr.dev/docs/quick-start/">quick start</a> · <a href="https://herdr.dev/docs/">docs</a>
+  <a href="#本-fork-说明">本 Fork</a> · <a href="#安装">安装</a> · <a href="https://herdr.dev/zh-cn/docs/quick-start/">快速开始</a> · <a href="https://herdr.dev/zh-cn/docs/">文档</a> · <a href="#赞助">赞助</a>
 </p>
 
 <p align="center">
-  English · <a href="README.zh-CN.md">简体中文</a>
+  简体中文 · <a href="https://github.com/herdrdev/herdr#readme">上游英文说明</a>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-666666?labelColor=333333" alt="Apache 2.0 license" /></a>
-  <a href="https://github.com/herdrdev/herdr/releases"><img src="https://img.shields.io/github/downloads/herdrdev/herdr/total?labelColor=333333&color=666666" alt="total GitHub release downloads" /></a>
-  <a href="https://github.com/herdrdev/herdr/stargazers"><img src="https://img.shields.io/github/stars/herdrdev/herdr?labelColor=333333&color=666666&logo=github" alt="GitHub stars" /></a>
-  <a href="https://github.com/herdrdev/herdr/releases/latest"><img src="https://img.shields.io/github/v/release/herdrdev/herdr?label=release&labelColor=333333&color=666666" alt="latest stable release" /></a>
-  <a href="https://formulae.brew.sh/formula/herdr"><img src="https://img.shields.io/homebrew/v/herdr?label=homebrew&labelColor=333333&color=666666" alt="Homebrew version" /></a>
-  <a href="https://x.com/herdrdev"><img src="https://img.shields.io/badge/follow-%40herdrdev-000000?logo=x&logoColor=white" alt="follow @herdrdev on X" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-666666?labelColor=333333" alt="Apache 2.0 许可证" /></a>
+  <a href="https://github.com/herdrdev/herdr/releases"><img src="https://img.shields.io/github/downloads/herdrdev/herdr/total?labelColor=333333&color=666666" alt="GitHub Release 总下载量" /></a>
+  <a href="https://github.com/herdrdev/herdr/stargazers"><img src="https://img.shields.io/github/stars/herdrdev/herdr?labelColor=333333&color=666666&logo=github" alt="GitHub Stars" /></a>
+  <a href="https://github.com/herdrdev/herdr/releases/latest"><img src="https://img.shields.io/github/v/release/herdrdev/herdr?label=release&labelColor=333333&color=666666" alt="最新稳定版" /></a>
+  <a href="https://formulae.brew.sh/formula/herdr"><img src="https://img.shields.io/homebrew/v/herdr?label=homebrew&labelColor=333333&color=666666" alt="Homebrew 版本" /></a>
+  <a href="https://x.com/herdrdev"><img src="https://img.shields.io/badge/follow-%40herdrdev-000000?logo=x&logoColor=white" alt="在 X 上关注 @herdrdev" /></a>
 </p>
+
+---
+
+## 本 Fork 说明
+
+这是由 `gaoyuoppa` 维护的 Herdr 定制 Fork。默认分支 `deploy/zh-with-perf` 在官方代码基础上保留中文化、性能优化及本地功能；`master` 仅用于镜像官方上游。
+
+> [!IMPORTANT]
+> 克隆或 Fork 本项目不会获得维护者的部署密钥，也不会连接或操作维护者的服务器。GitHub Actions Secrets 不会随 Fork 复制，原仓库的部署工作流也只有具备写权限的人才能手动触发。维护自己的 Fork 时，请配置你自己的服务器变量和 Secrets，切勿把密钥提交到代码中。
+
+自动同步、构建和部署机制详见 [Fork 自动化说明](.github/FORK_AUTOMATION.md)。
 
 ---
 
 https://github.com/user-attachments/assets/043ec09f-4bdd-41d5-aee0-8fda6b83e267
 
-**the runtime your coding agents live on.**
+**编码智能体长期运行的终端运行时。**
 
-- **always running** — herdr is a background server; the terminals live inside it. close the lid, drop the network, restart the machine — agents keep working and sessions come back. reattach from any terminal, or over ssh.
-- **never hunt for the stuck one** — every pane is marked working, blocked, or idle. when an agent stops and needs an answer, herdr says so.
-- **agent-native** — the cli and socket api are the same surface agents drive: spawn panes, prompt each other, wait until another agent is genuinely blocked. [agent skill →](https://herdr.dev/docs/agent-skill/)
-- **runs what you already run** — claude code, codex, cursor, opencode, grok and the rest. herdr doesn't wrap or replace them, it just owns their terminals.
-- **keyboard and mouse, both first-class** — tmux-style prefix keys *and* click, drag, split. pick per moment, not per tool.
-- **plugins** — extend panes and workflows. [browse the marketplace →](https://herdr.dev/plugins/)
-- **one rust binary, no electron** — runs in whatever terminal you already use.
+- **始终运行**——Herdr 是后台服务器，终端会话驻留其中；合盖、断网或重启后，智能体和会话仍可恢复，并可从任意终端或通过 SSH 重新连接。
+- **无需再寻找卡住的智能体**——每个窗格都会标记为工作中、阻塞或空闲；智能体停下并需要回答时，Herdr 会明确提示。
+- **智能体原生**——CLI 和 Socket API 都可由智能体直接驱动，用于创建窗格、相互发送提示并等待另一个智能体真正阻塞。[智能体技能 →](https://herdr.dev/zh-cn/docs/agent-skill/)
+- **兼容现有智能体**——Claude Code、Codex、Cursor、OpenCode、Grok 等均可直接运行；Herdr 不包装或替代它们，只管理其终端。
+- **键盘和鼠标都是一等公民**——既支持 tmux 风格前缀键，也支持点击、拖动和分割，可按场景自由选择。
+- **插件系统**——扩展窗格和工作流。[浏览插件市场 →](https://herdr.dev/plugins/)
+- **单个 Rust 二进制，不依赖 Electron**——直接运行在你已经使用的终端里。
 
 ---
 
-## install
+## 安装
+
+### 使用本 Fork 定制版
+
+从默认定制分支构建：
+
+```bash
+git clone --branch deploy/zh-with-perf https://github.com/gaoyuoppa/herdr.git
+cd herdr
+cargo build --release --locked
+```
+
+项目当前使用 Rust 1.96.1 和 Zig 0.15.2。Linux 自动化仅生成 `x86_64-unknown-linux-musl` 静态二进制。
+
+### 使用官方稳定版
+
+以下命令安装的是 `herdrdev/herdr` 官方版本，不包含本 Fork 的定制修改：
 
 ```bash
 curl -fsSL https://herdr.dev/install.sh | sh
 ```
 
-or `brew install herdr` · `mise use -g herdr` · windows beta: `powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"` · [binaries](https://github.com/herdrdev/herdr/releases)
+也可以使用 `brew install herdr`、`mise use -g herdr`，或安装 Windows 测试版：
 
-then start it where the work lives:
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
+```
+
+官方预编译文件见 [herdrdev/herdr Releases](https://github.com/herdrdev/herdr/releases)。
+
+安装后，在工作目录中启动：
 
 ```bash
 herdr
 ```
 
-run your agents, split panes, walk away. `ctrl+b q` detaches, `herdr` reattaches. [quick start →](https://herdr.dev/docs/quick-start/)
+运行智能体并按需分割窗格。`ctrl+b q` 用于分离，重新执行 `herdr` 即可连接回来。[快速开始 →](https://herdr.dev/zh-cn/docs/quick-start/)
 
-## docs
+## 文档
 
-everything lives at [herdr.dev/docs](https://herdr.dev/docs/): [quick start](https://herdr.dev/docs/quick-start/) · [concepts](https://herdr.dev/docs/concepts/) · [supported agents](https://herdr.dev/docs/agents/) · [keyboard](https://herdr.dev/docs/keyboard/) · [configuration](https://herdr.dev/docs/configuration/) · [session state](https://herdr.dev/docs/session-state/) · [remote](https://herdr.dev/docs/persistence-remote/) · [integrations](https://herdr.dev/docs/integrations/) · [plugins](https://herdr.dev/docs/plugins/) · [socket api](https://herdr.dev/docs/socket-api/)
+官方中文文档位于 [herdr.dev/zh-cn/docs](https://herdr.dev/zh-cn/docs/)： [快速开始](https://herdr.dev/zh-cn/docs/quick-start/) · [核心概念](https://herdr.dev/zh-cn/docs/concepts/) · [支持的智能体](https://herdr.dev/zh-cn/docs/agents/) · [键盘操作](https://herdr.dev/zh-cn/docs/keyboard/) · [配置](https://herdr.dev/zh-cn/docs/configuration/) · [会话状态](https://herdr.dev/zh-cn/docs/session-state/) · [远程访问](https://herdr.dev/zh-cn/docs/persistence-remote/) · [集成](https://herdr.dev/zh-cn/docs/integrations/) · [插件](https://herdr.dev/zh-cn/docs/plugins/) · [Socket API](https://herdr.dev/zh-cn/docs/socket-api/)
 
-## thanks
+## 赞助
+
+Herdr 以全职、开放的方式开发。赞助将直接用于项目开发、稳定性以及真正的智能体运行时。
+
+### 金牌赞助
 
 <a href="https://terminaltrove.com/"><img src="assets/sponsors/terminal-trove.png" alt="Terminal Trove" width="200" /></a>
 
-[Terminal Trove](https://terminaltrove.com/) and every backer listed in [SPONSORS.md](./SPONSORS.md) — thank you 🐑
+[**→ 成为赞助者**](https://github.com/sponsors/ogulcancelik) · 企业合作：hey@herdr.dev · 赞助档位见 [SPONSORS.md](./SPONSORS.md)。谢谢 🐑
 
-enterprise / partnership: hey@herdr.dev
+## 智能体须知
 
-## agent instructions
+如果你是协助本仓库的 AI 智能体，请在修改代码前阅读 [`AGENTS.md`](./AGENTS.md)，在创建 Issue 或 PR 前阅读 [`CONTRIBUTING.md`](./CONTRIBUTING.md)。
 
-if you are an ai agent helping with this repository, read [`AGENTS.md`](./AGENTS.md) before making changes and read [`CONTRIBUTING.md`](./CONTRIBUTING.md) before opening issues or PRs.
-
-## development
+## 开发
 
 ```bash
-git clone https://github.com/herdrdev/herdr
+git clone --branch deploy/zh-with-perf https://github.com/gaoyuoppa/herdr.git
 cd herdr
 cargo build --release
 
-just test        # unit tests
-just check       # formatting, tests, and maintenance checks
+just test        # 单元测试
+just check       # 格式检查、测试和维护性检查
 ```
 
-## license
+## 许可证
 
-Herdr is licensed under the [Apache License 2.0](LICENSE).
+Herdr 基于 [Apache License 2.0](LICENSE) 发布。
