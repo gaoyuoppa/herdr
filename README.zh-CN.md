@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · 简体中文
+  <a href="https://github.com/herdrdev/herdr#readme">English（上游）</a> · 简体中文
 </p>
 
 <p align="center">
