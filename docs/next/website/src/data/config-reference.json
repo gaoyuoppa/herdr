@@ -658,6 +658,12 @@
           "description": "Draw borders around split panes."
         },
         {
+          "key": "ui.pane_scrollbars",
+          "type": "boolean",
+          "default": "true",
+          "description": "Draw interactive scrollbars beside terminal panes. Disable to reclaim the scrollbar column and keep it out of terminal-native selections."
+        },
+        {
           "key": "ui.pane_gaps",
           "type": "boolean",
           "default": "true",
@@ -674,6 +680,16 @@
           "type": "boolean",
           "default": "false",
           "description": "Hide the tab row when the workspace has one tab."
+        },
+        {
+          "key": "ui.tab_bar_position",
+          "type": "enum",
+          "default": "\"top\"",
+          "description": "Place the desktop tab row above or below the terminal panes.",
+          "values": [
+            "top",
+            "bottom"
+          ]
         },
         {
           "key": "ui.agent_panel_sort",

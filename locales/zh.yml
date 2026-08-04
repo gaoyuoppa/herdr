@@ -127,6 +127,7 @@ cli:
   plugin_pane_open_about: "打开插件窗格"
   plugin_pane_focus_about: "聚焦插件窗格"
   plugin_pane_close_about: "关闭插件窗格"
+  server_not_running: "在 %{socket_path} 上没有运行中的 Herdr 服务器；请运行 `%{attach_command}` 来启动或连接服务器"
   server_ping_missing_protocol: "服务器 ping 响应中没有协议版本"
   protocol_client_newer: "客户端协议 %{client_protocol} 高于服务器协议 %{server_protocol}；请先重启 Herdr 服务器再使用此命令。%{restart_guidance}"
   protocol_client_older: "客户端协议 %{client_protocol} 低于服务器协议 %{server_protocol}；请先升级 Herdr 客户端再使用此命令"

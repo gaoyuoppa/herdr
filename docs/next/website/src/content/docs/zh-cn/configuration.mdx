@@ -256,6 +256,8 @@ yellow = "#f9e2af"
 
 `host_cursor` 控制 Herdr 使用外部终端的原生光标还是自行绘制光标。默认值 `auto` 会在 Windows 和 WSL 上使用绘制光标以减少重绘闪烁，在其他平台使用原生光标。
 
+在 `[ui]` 下设置 `tab_bar_position = "bottom"`，可将桌面标签栏放到终端窗格下方。Prefix、Navigate、Copy 和 Resize 模式栏激活时会暂时替换底部标签栏。默认值为 `"top"`。
+
 如需让 Ctrl+右键手势传给启用鼠标上报的窗格应用，而不是打开 Herdr 菜单，可设置 `right_click_passthrough_modifier = "ctrl"`。
 
 ### 侧边栏行布局
@@ -372,6 +374,8 @@ position = "bottom-right"
 ```
 
 选择 `herdr` 可使用应用内 toast，选择 `terminal` 可使用适合 SSH 场景的外层终端通知，选择 `system` 可使用本地操作系统通知服务，选择 `off` 可禁用弹出通知。Herdr 会抑制活动标签页的弹出通知。在[配置参考](/docs/config-reference/)中搜索 `ui.toast`，可查看位置、延迟行为和剪贴板反馈设置。
+
+在 macOS 上，`system` 会先尝试 `terminal-notifier`；如果它不可用或执行失败，则回退到 `/usr/bin/osascript`。该回退方式会在通知中心显示为 Script Editor，并且无法激活承载 Herdr 的终端。可运行 `brew install terminal-notifier` 安装 `terminal-notifier`。如果 Herdr 检测到受支持的终端，点击通知时它可以激活该终端应用。也可以选择 `terminal`，让受支持的外层终端负责发送通知。
 
 ## 声音
 

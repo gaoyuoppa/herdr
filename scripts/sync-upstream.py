@@ -14,7 +14,7 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_BRANCH = os.environ.get("HERDR_PATCH_BRANCH", "deploy/zh-with-perf")
 DEFAULT_REMOTE = "upstream"
-DEFAULT_REMOTE_URL = "https://github.com/ogulcancelik/herdr.git"
+DEFAULT_REMOTE_URL = "https://github.com/herdrdev/herdr.git"
 
 
 def run(*args: str, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str]:

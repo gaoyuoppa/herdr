@@ -103,13 +103,13 @@ fn parse_integration_target(
 ) -> std::io::Result<Option<IntegrationTarget>> {
     let Some(target) = args.first().map(|arg| arg.as_str()) else {
         eprintln!(
-            "usage: herdr integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qwen|qodercli|cursor|mastracode|grok>"
+            "usage: herdr integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qwen|qodercli|cursor|mastracode|antigravity-cli|grok>"
         );
         return Ok(None);
     };
     if args.len() != 1 {
         eprintln!(
-            "usage: herdr integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qwen|qodercli|cursor|mastracode|grok>"
+            "usage: herdr integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qwen|qodercli|cursor|mastracode|antigravity-cli|grok>"
         );
         return Ok(None);
     }
@@ -130,11 +130,12 @@ fn parse_integration_target(
         "qodercli" => IntegrationTarget::Qodercli,
         "cursor" => IntegrationTarget::Cursor,
         "mastracode" => IntegrationTarget::Mastracode,
+        "antigravity-cli" | "antigravity_cli" => IntegrationTarget::AntigravityCli,
         "grok" => IntegrationTarget::Grok,
         _ => {
             eprintln!("unknown integration target: {target}");
             eprintln!(
-                "currently supported: pi, omp, claude, codex, copilot, devin, droid, kimi, opencode, kilo, hermes, qwen, qodercli, cursor, mastracode, grok"
+                "currently supported: pi, omp, claude, codex, copilot, devin, droid, kimi, opencode, kilo, hermes, qwen, qodercli, cursor, mastracode, antigravity-cli, grok"
             );
             return Ok(None);
         }
@@ -160,6 +161,7 @@ fn print_integration_help() {
     eprintln!("  herdr integration install qodercli");
     eprintln!("  herdr integration install cursor");
     eprintln!("  herdr integration install mastracode");
+    eprintln!("  herdr integration install antigravity-cli");
     eprintln!("  herdr integration install grok");
     eprintln!("  herdr integration uninstall pi");
     eprintln!("  herdr integration uninstall omp");
@@ -176,6 +178,7 @@ fn print_integration_help() {
     eprintln!("  herdr integration uninstall qodercli");
     eprintln!("  herdr integration uninstall cursor");
     eprintln!("  herdr integration uninstall mastracode");
+    eprintln!("  herdr integration uninstall antigravity-cli");
     eprintln!("  herdr integration uninstall grok");
     eprintln!("  herdr integration status [--outdated-only]");
 }

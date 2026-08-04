@@ -127,6 +127,7 @@ cli:
   plugin_pane_open_about: "Open a plugin pane"
   plugin_pane_focus_about: "Focus a plugin pane"
   plugin_pane_close_about: "Close a plugin pane"
+  server_not_running: "no herdr server is running at %{socket_path}; run `%{attach_command}` to start or attach it"
   server_ping_missing_protocol: "server ping did not include a protocol version"
   protocol_client_newer: "client protocol %{client_protocol} is newer than server protocol %{server_protocol}; restart the Herdr server before using this command. %{restart_guidance}"
   protocol_client_older: "client protocol %{client_protocol} is older than server protocol %{server_protocol}; upgrade the Herdr client before using this command"

@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  buffersEqualModuloCheckoutLineEndings,
-  normalizeVersion,
-  sortVersionsNewestFirst,
-} from './docs-versions.mjs';
+import { buffersEqualModuloCheckoutLineEndings } from './docs-snapshot.mjs';
+import { normalizeVersion, sortVersionsNewestFirst } from './docs-versions.mjs';
 
 describe('normalizeVersion', () => {
   test.each([
