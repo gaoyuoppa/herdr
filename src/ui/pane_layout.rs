@@ -10,18 +10,24 @@ use rust_i18n::t;
 use crate::{
     app::state::{AppState, PaneLayoutInteraction, PaneTransferDestination, PreviewPaneRole},
     layout::LayoutPreset,
+    terminal::TerminalRuntimeRegistry,
 };
 
 use super::widgets::{panel_contrast_fg, render_panel_shell};
 
-pub(super) fn render_pane_layout_overlay(app: &AppState, frame: &mut Frame, area: Rect) {
+pub(super) fn render_pane_layout_overlay(
+    app: &AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+    frame: &mut Frame,
+    area: Rect,
+) {
     let Some(interaction) = app.pane_layout.as_ref() else {
         return;
     };
     match &interaction.interaction {
         PaneLayoutInteraction::Transfer(_) => {
             render_transfer_preview(app, frame);
-            render_transfer_targets(app, frame, area);
+            render_transfer_targets(app, terminal_runtimes, frame, area);
         }
         PaneLayoutInteraction::Reposition { .. } | PaneLayoutInteraction::Preset { .. } => {
             let Some(preview) = app.pane_layout_preview() else {
@@ -52,7 +58,7 @@ pub(super) fn render_pane_layout_overlay(app: &AppState, frame: &mut Frame, area
             }
         }
     }
-    render_instruction_bar(app, frame, area);
+    render_instruction_bar(app, terminal_runtimes, frame, area);
 }
 
 fn render_transfer_preview(app: &AppState, frame: &mut Frame) {
@@ -91,7 +97,12 @@ fn render_preview_block(
     frame.render_widget(block, rect);
 }
 
-fn render_transfer_targets(app: &AppState, frame: &mut Frame, area: Rect) {
+fn render_transfer_targets(
+    app: &AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+    frame: &mut Frame,
+    area: Rect,
+) {
     let Some(PaneLayoutInteraction::Transfer(transfer)) =
         app.pane_layout.as_ref().map(|layout| &layout.interaction)
     else {
@@ -133,7 +144,7 @@ fn render_transfer_targets(app: &AppState, frame: &mut Frame, area: Rect) {
             Paragraph::new(format!(
                 " {}  {}",
                 idx + 1,
-                transfer_destination_label(app, &candidate.destination)
+                transfer_destination_label(app, terminal_runtimes, &candidate.destination)
             ))
             .style(style),
             Rect::new(inner.x, inner.y + row as u16, inner.width, 1),
@@ -182,10 +193,8 @@ fn pane_transfer_target_picker_rect(area: Rect, candidate_count: usize) -> Rect 
     if candidate_count == 0 || area.width < 24 || area.height < 5 {
         return Rect::default();
     }
-    let height = area
-        .height
-        .saturating_sub(2)
-        .min(candidate_count.min(10) as u16 + 2);
+    let desired_height = (candidate_count.min(usize::from(u16::MAX)) as u16).saturating_add(2);
+    let height = area.height.saturating_sub(2).min(desired_height);
     let width = area.width.min(44);
     Rect::new(
         area.x.saturating_add(area.width.saturating_sub(width)),
@@ -205,7 +214,11 @@ fn pane_transfer_visible_start(
         .min(candidate_count.saturating_sub(visible))
 }
 
-fn transfer_destination_label(app: &AppState, destination: &PaneTransferDestination) -> String {
+fn transfer_destination_label(
+    app: &AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+    destination: &PaneTransferDestination,
+) -> String {
     match destination {
         PaneTransferDestination::PaneEdge {
             workspace_id,
@@ -225,7 +238,7 @@ fn transfer_destination_label(app: &AppState, destination: &PaneTransferDestinat
                 return format!("{pane_id} · {direction}");
             };
             let workspace = &app.workspaces[ws_idx];
-            let workspace_label = workspace.display_name_from_terminals(&app.terminals);
+            let workspace_label = workspace.display_name_from(&app.terminals, terminal_runtimes);
             let tab_label = workspace
                 .tab_display_name(tab_idx)
                 .unwrap_or_else(|| tab_id.clone());
@@ -244,21 +257,27 @@ fn transfer_destination_label(app: &AppState, destination: &PaneTransferDestinat
             }
         }
         PaneTransferDestination::NewTab { workspace_id } => {
-            let detach_label = format!(
-                "{} → {}",
-                t!("state.detach"),
-                t!("state.pane_transfer_new_tab")
-            );
+            let is_source_workspace = app
+                .pane_layout
+                .as_ref()
+                .and_then(crate::app::state::PaneLayoutInteractionState::transfer_source)
+                .is_some_and(|source| source.workspace_id == *workspace_id);
+            let action_label = if is_source_workspace {
+                t!("state.detach")
+            } else {
+                t!("state.pane_transfer_move")
+            };
+            let new_tab_label = format!("{} → {}", action_label, t!("state.pane_transfer_new_tab"));
             let workspace_label = app
                 .workspaces
                 .iter()
                 .find(|workspace| workspace.id == *workspace_id)
-                .map(|workspace| workspace.display_name_from_terminals(&app.terminals));
+                .map(|workspace| workspace.display_name_from(&app.terminals, terminal_runtimes));
             match workspace_label {
                 Some(workspace_label) => {
-                    format!("{workspace_id} · {workspace_label} · {detach_label}")
+                    format!("{workspace_id} · {workspace_label} · {new_tab_label}")
                 }
-                None => format!("{workspace_id} · {detach_label}"),
+                None => format!("{workspace_id} · {new_tab_label}"),
             }
         }
         PaneTransferDestination::NewWorkspace => format!(
@@ -305,7 +324,12 @@ fn render_preset_picker(app: &AppState, frame: &mut Frame, area: Rect) {
     }
 }
 
-fn render_instruction_bar(app: &AppState, frame: &mut Frame, area: Rect) {
+fn render_instruction_bar(
+    app: &AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+    frame: &mut Frame,
+    area: Rect,
+) {
     if area.height == 0 {
         return;
     }
@@ -325,7 +349,7 @@ fn render_instruction_bar(app: &AppState, frame: &mut Frame, area: Rect) {
             let target = transfer
                 .selected
                 .as_ref()
-                .map(|destination| transfer_destination_label(app, destination))
+                .map(|destination| transfer_destination_label(app, terminal_runtimes, destination))
                 .unwrap_or_else(|| "—".into());
             (
                 t!("state.pane_transfer_title").to_string(),
@@ -450,7 +474,9 @@ mod tests {
                 .public_pane_number(second_pane)
                 .expect("second public number"),
         );
-        app.workspaces = vec![workspace];
+        let target_workspace = crate::workspace::Workspace::test_new("项目乙");
+        let target_workspace_id = target_workspace.id.clone();
+        app.workspaces = vec![workspace, target_workspace];
         app.ensure_test_terminals();
         for pane_id in [first_pane, second_pane] {
             let terminal_id = app.workspaces[0].tabs[0]
@@ -461,9 +487,24 @@ mod tests {
                 .expect("terminal state")
                 .set_manual_label("服务".into());
         }
+        let source = app
+            .pane_transfer_source(0, 0, first_pane)
+            .expect("transfer source");
+        app.pane_layout = Some(crate::app::state::PaneLayoutInteractionState {
+            ws_idx: 0,
+            tab_idx: 0,
+            source_pane_id: first_pane,
+            interaction: PaneLayoutInteraction::Transfer(crate::app::state::PaneTransferState {
+                source,
+                origin: crate::app::state::PaneTransferOrigin::ContextMenu,
+                selected: None,
+            }),
+        });
 
+        let runtimes = TerminalRuntimeRegistry::new();
         let first = transfer_destination_label(
             &app,
+            &runtimes,
             &PaneTransferDestination::PaneEdge {
                 workspace_id: workspace_id.clone(),
                 tab_id: tab_id.clone(),
@@ -473,6 +514,7 @@ mod tests {
         );
         let second = transfer_destination_label(
             &app,
+            &runtimes,
             &PaneTransferDestination::PaneEdge {
                 workspace_id: workspace_id.clone(),
                 tab_id,
@@ -482,8 +524,16 @@ mod tests {
         );
         let new_tab = transfer_destination_label(
             &app,
+            &runtimes,
             &PaneTransferDestination::NewTab {
                 workspace_id: workspace_id.clone(),
+            },
+        );
+        let moved_new_tab = transfer_destination_label(
+            &app,
+            &runtimes,
+            &PaneTransferDestination::NewTab {
+                workspace_id: target_workspace_id,
             },
         );
 
@@ -500,6 +550,11 @@ mod tests {
         assert!(first.contains(&first_public_id));
         assert!(second.contains(&second_public_id));
         assert!(new_tab.contains(t!("state.detach").as_ref()));
+        assert!(moved_new_tab.contains(t!("state.pane_transfer_move").as_ref()));
+        assert!(
+            !moved_new_tab.contains(t!("state.detach").as_ref()),
+            "moving into another workspace is not a same-workspace detach"
+        );
         assert_ne!(
             first, second,
             "stable pane identity must disambiguate titles"
@@ -507,14 +562,15 @@ mod tests {
     }
 
     #[test]
-    fn overflow_picker_keeps_primary_detach_rows_clickable() {
+    fn transfer_picker_shows_all_session_rows_when_height_allows() {
         let mut app = AppState::test_new();
-        let mut workspace = crate::workspace::Workspace::test_new("many-panes");
-        let source_pane_id = workspace.tabs[0].root_pane;
-        workspace.test_split(Direction::Horizontal);
-        workspace.test_split(Direction::Vertical);
-        workspace.test_split(Direction::Horizontal);
-        app.workspaces = vec![workspace];
+        let source_workspace = crate::workspace::Workspace::test_new("source");
+        let source_pane_id = source_workspace.tabs[0].root_pane;
+        app.workspaces = std::iter::once(source_workspace)
+            .chain(
+                (0..6).map(|idx| crate::workspace::Workspace::test_new(&format!("target-{idx}"))),
+            )
+            .collect();
         let source = app
             .pane_transfer_source(0, 0, source_pane_id)
             .expect("transfer source");
@@ -532,15 +588,32 @@ mod tests {
         let candidates = app.pane_transfer_candidates();
         let picker = pane_transfer_target_picker_rect(area, candidates.len());
 
-        assert!(candidates.len() > 10);
+        assert_eq!(
+            candidates.len(),
+            13,
+            "one new-workspace row, six session rows, and six meaningful new-tab rows"
+        );
+        assert_eq!(
+            picker.height,
+            candidates.len() as u16 + 2,
+            "the picker should not truncate to ten content rows when space is available"
+        );
         assert!(matches!(
             pane_transfer_destination_at(&app, area, picker.x + 1, picker.y + 1),
-            Some(PaneTransferDestination::NewTab { workspace_id })
-                if workspace_id == source.workspace_id
-        ));
-        assert_eq!(
-            pane_transfer_destination_at(&app, area, picker.x + 1, picker.y + 2),
             Some(PaneTransferDestination::NewWorkspace)
-        );
+        ));
+        assert!(matches!(
+            pane_transfer_destination_at(&app, area, picker.x + 1, picker.y + 2),
+            Some(PaneTransferDestination::PaneEdge { .. })
+        ));
+        assert!(matches!(
+            pane_transfer_destination_at(
+                &app,
+                area,
+                picker.x + 1,
+                picker.y + candidates.len() as u16
+            ),
+            Some(PaneTransferDestination::NewTab { .. })
+        ));
     }
 }

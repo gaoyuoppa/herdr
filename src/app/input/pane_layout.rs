@@ -429,12 +429,18 @@ impl App {
                 pane_transfer_response_changed(&response)
             }
             PaneTransferDestination::NewWorkspace => {
+                let source_label = self
+                    .state
+                    .workspaces
+                    .iter()
+                    .find(|ws| ws.id == source.workspace_id)
+                    .and_then(|ws| ws.custom_name.clone());
                 let response = self.runtime_pane_move(
                     "tui.pane.transfer.new_workspace",
                     PaneMoveParams {
                         pane_id: source.pane_id,
                         destination: ApiPaneMoveDestination::NewWorkspace {
-                            label: None,
+                            label: source_label,
                             tab_label: None,
                         },
                         focus: true,
@@ -729,6 +735,56 @@ mod tests {
             }));
         assert!(app.state.pane_transfer_preview().is_some());
         assert_eq!(app.state.workspaces[0].tabs[0].layout, before);
+    }
+
+    #[test]
+    fn transfer_direction_updates_selected_session_without_duplicate_rows() {
+        let (mut app, source, target, _) = app_with_three_panes();
+        let target_public = app.public_pane_id(0, target).expect("target public id");
+        assert!(open_pane_transfer(
+            &mut app.state,
+            PaneTransferOrigin::ContextMenu,
+            0,
+            0,
+            source,
+        ));
+        let target_destination = pane_transfer_candidates(&app.state)
+            .into_iter()
+            .find(|candidate| {
+                matches!(
+                    &candidate.destination,
+                    PaneTransferDestination::PaneEdge { pane_id, .. }
+                        if pane_id == &target_public
+                )
+            })
+            .map(|candidate| candidate.destination)
+            .expect("target session");
+        set_transfer_destination(&mut app.state, target_destination);
+
+        set_transfer_placement(&mut app.state, PanePlacement::Up);
+
+        let target_rows = pane_transfer_candidates(&app.state)
+            .into_iter()
+            .filter(|candidate| {
+                matches!(
+                    &candidate.destination,
+                    PaneTransferDestination::PaneEdge { pane_id, .. }
+                        if pane_id == &target_public
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            target_rows.len(),
+            1,
+            "changing the split edge must not duplicate the target session"
+        );
+        assert!(matches!(
+            target_rows[0].destination,
+            PaneTransferDestination::PaneEdge {
+                placement: PanePlacement::Up,
+                ..
+            }
+        ));
     }
 
     #[test]

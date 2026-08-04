@@ -473,6 +473,7 @@ state:
   layout_preset_main_left: "Main pane left"
   layout_preset_main_top: "Main pane top"
   pane_transfer_title: "Move pane"
+  pane_transfer_move: "move"
   pane_transfer_new_tab: "New tab"
   pane_transfer_new_workspace: "New workspace"
   pane_transfer_failed: "Pane move failed"

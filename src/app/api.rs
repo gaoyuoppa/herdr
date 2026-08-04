@@ -270,6 +270,26 @@ impl App {
             } else {
                 None
             };
+        let closing_workspace_origin = if let AppEvent::PaneDied { pane_id } = &ev {
+            self.find_pane(*pane_id).and_then(|(ws_idx, _)| {
+                self.state
+                    .close_pane_would_close_workspace(ws_idx, *pane_id)
+                    .then(|| {
+                        let workspace = &self.state.workspaces[ws_idx];
+                        (
+                            workspace.id.clone(),
+                            workspace
+                                .display_name_from(&self.state.terminals, &self.terminal_runtimes),
+                        )
+                    })
+            })
+        } else {
+            None
+        };
+        if let Some((workspace_id, label)) = closing_workspace_origin {
+            self.state
+                .refresh_origin_workspace_label(&workspace_id, &label);
+        }
         let terminal_cwd_reported = matches!(ev, AppEvent::TerminalCwdReported { .. });
         let previous_toast = self.state.toast.clone();
         let pane_updates = self.state.handle_app_event(ev);
