@@ -194,7 +194,6 @@ impl StatusIndicatorStyle {
             Self::Dots => "dots",
             Self::Symbols => "symbols",
         }
-
     }
 }
 

@@ -1997,7 +1997,6 @@ mod tests {
         let list_area = workspace_list_rect(area, app.sidebar_section_split);
         let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
         terminal
-
             .draw(|frame| {
                 render_workspace_list(
                     &app,

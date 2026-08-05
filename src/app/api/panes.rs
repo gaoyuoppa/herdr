@@ -1065,7 +1065,6 @@ impl App {
                     id,
                     error.code,
                     pane_move_error_message(error.message, rollback_error),
-
                 );
             }
         };
