@@ -15,7 +15,6 @@ concurrency:
 permissions:
   contents: write
   issues: write
-  workflows: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -87,7 +86,12 @@ jobs:
             exit 1
           fi
           if [[ "$(git rev-parse refs/remotes/origin/master)" != "$UPSTREAM_SHA" ]]; then
-            git push origin "refs/remotes/upstream/master:refs/heads/master"
+            # 镜像推送可能因上游改动了 .github/workflows 下的文件而被 GitHub 拒绝
+            # （GITHUB_TOKEN 永远无权写 workflow 文件，属平台安全限制）。镜像仅为参考，
+            # 部署直接读上游，因此这里失败只告警不中断。
+            if ! git push origin "refs/remotes/upstream/master:refs/heads/master"; then
+              echo "::warning::fork master 镜像推送被拒（通常因上游改动了 workflow 文件，GITHUB_TOKEN 无权写 workflow），跳过镜像，不影响部署"
+            fi
           fi
 
       - name: Detect pending upstream change
