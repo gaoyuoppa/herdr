@@ -242,6 +242,7 @@ You can override individual colors:
 
 ```toml
 [theme.custom]
+sidebar_bg = "#181825"
 panel_bg = "reset"
 accent = "#a6e3a1"
 green = "#a6e3a1"
@@ -249,6 +250,8 @@ blue = "#89b4fa"
 red = "#f38ba8"
 yellow = "#f9e2af"
 ```
+
+`sidebar_bg` optionally gives the desktop sidebar its own background. When omitted, the sidebar keeps the host terminal background.
 
 Color values accept hex, named colors, `rgb(r,g,b)`, or reset aliases like `reset`, `default`, `none`, and `transparent`.
 
@@ -261,6 +264,15 @@ The sidebar is the main Herdr dashboard. Search `ui.` in the [Config reference](
 `host_cursor` controls whether Herdr uses the outer terminal's native cursor or draws its own cursor as terminal cell content. The default, `auto`, draws Herdr's cursor on Windows and WSL to avoid cursor flicker during active redraws, and uses the native cursor elsewhere.
 
 Set `tab_bar_position = "bottom"` under `[ui]` to place the desktop tab row below the terminal panes. Prefix, Navigate, Copy, and Resize mode bars temporarily replace the bottom tab row while active. The default is `"top"`.
+
+Agent status uses compact colored dots by default. To distinguish blocked, working, done, idle, and unknown states by shape as well as color, choose **distinct symbols** in Settings or configure:
+
+```toml
+[ui]
+status_indicators = "symbols"
+```
+
+The symbols are static, so this option does not enable spinner animation.
 
 ### Sidebar row layouts
 

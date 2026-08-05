@@ -420,8 +420,8 @@ mobile:
   new_tab: "+ new tab"
   no_agents: "no agents"
   all_idle: "all idle"
-  blocked_count: "◉ %{count} blocked"
-  done_count: "● %{count} done"
+  blocked_count: "%{count} blocked"
+  done_count: "%{count} done"
   working_count: "%{count} working"
   idle_count: "%{count} idle"
   waiting: "%{agent} waiting"
@@ -430,6 +430,7 @@ mobile:
 # state label/context menu (app/state.rs)
 state:
   theme: "theme"
+  indicators: "indicators"
   sound: "sound"
   toasts: "toasts"
   pane_labels: "pane labels"

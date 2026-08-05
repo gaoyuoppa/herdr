@@ -420,8 +420,8 @@ mobile:
   new_tab: "+ 新建标签页"
   no_agents: "无智能体"
   all_idle: "全部空闲"
-  blocked_count: "◉ %{count} 已阻塞"
-  done_count: "● %{count} 已完成"
+  blocked_count: "%{count} 已阻塞"
+  done_count: "%{count} 已完成"
   working_count: "%{count} 运行中"
   idle_count: "%{count} 空闲"
   waiting: "%{agent} 等待中"
@@ -430,6 +430,7 @@ mobile:
 # state label/context menu (app/state.rs)
 state:
   theme: "主题"
+  indicators: "指示器"
   sound: "声音"
   toasts: "通知"
   pane_labels: "窗格标签"
