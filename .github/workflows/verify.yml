@@ -1,0 +1,91 @@
+name: Verify custom branch (manual)
+
+# 手动触发的远程快速验证：本地无 Rust 环境时，上游冲突合并后先跑这个
+# workflow 验证（fmt/clippy/nextest/python 测试），通过后再触发
+# sync-build-deploy.yml 部署。只验证不构建不部署，几分钟出结果。
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 要验证的分支
+        required: false
+        default: deploy/zh-with-perf
+
+concurrency:
+  group: herdr-verify
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RUST_TOOLCHAIN_VERSION: 1.96.1
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          components: rustfmt,clippy
+
+      - name: Install Rust tools
+        uses: taiki-e/install-action@fd2f5e3d644b484055ebf4268f474c565f148f25 # v2.81.9
+        with:
+          tool: just,cargo-nextest
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Install Linux build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i '/azure.archive.ubuntu.com/d' /etc/apt/apt-mirrors.txt
+          fi
+          sudo find /etc/apt/sources.list.d -type f \( -iname '*microsoft*' -o -iname '*azure-cli*' \) -print -delete
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build musl-tools binutils file
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          cache-bin: false
+          key: fork-verify
+
+      - name: Run source, Rust, maintenance, and integration checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          just ci 'all()'
+          python3 -m unittest \
+            scripts.test_agent_detection_manifest_check \
+            scripts.test_changelog \
+            scripts.test_config_reference_check \
+            scripts.test_docs_translation_parity \
+            scripts.test_herdr_automation_issue \
+            scripts.test_herdr_deploy \
+            scripts.test_herdr_deploy_integration \
+            scripts.test_hermes_integration_asset \
+            scripts.test_package_windows_conpty \
+            scripts.test_preview \
+            scripts.test_vendor_libghostty_vt \
+            scripts.test_vendor_portable_pty
