@@ -7,6 +7,7 @@ use crossterm::event::{
 #[cfg(not(windows))]
 use crossterm::event::{PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
 use crossterm::execute;
+use rust_i18n::t;
 
 pub(crate) const HERDR_ENV_VAR: &str = "HERDR_ENV";
 pub(crate) const HERDR_ENV_VALUE: &str = "1";
@@ -273,10 +274,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Pane apps like lazygit and btop can still receive mouse when they request it.
 # mouse_capture = true
 
-# Automatically copy text selected with the mouse.
-# Set false to retain drag or double-click word selection until Ctrl+C,
-# or Cmd+C when the host forwards it, copies and clears it.
-# copy_on_select = true
+# Mouse selection behavior: true or "clipboard" copies immediately; false or
+# "manual" retains the selection for Ctrl/Cmd+C, Enter, or y to copy and Esc to cancel.
+# Use "disabled" to disable mouse text selection and copying entirely.
+# copy_on_select = "clipboard"
 
 # Host cursor policy: "auto", "native", or "drawn".
 # "auto" draws Herdr's own cursor on native Windows builds and WSL to avoid ConPTY cursor flicker, and uses the native terminal cursor elsewhere.
@@ -592,9 +593,9 @@ fn main() -> io::Result<()> {
     }
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("herdr — terminal workspace manager for AI coding agents");
+        println!("herdr — {}", t!("cli.herdr_about"));
         println!();
-        println!("Usage: herdr [options]");
+        println!("{}: herdr [options]", t!("cli.root_usage_heading"));
         println!("       herdr --session <name> [options]");
         println!("       herdr --remote <ssh-target> [--session <name>]");
         println!("       herdr session attach <name>");
@@ -613,95 +614,91 @@ fn main() -> io::Result<()> {
         println!("       herdr notification <subcommand> ...");
         println!("       herdr agent <subcommand> ...");
         println!("       herdr pane <subcommand> ...");
+        println!("       herdr terminal <subcommand> ...");
         println!("       herdr session <subcommand> ...");
         println!("       herdr integration <subcommand> ...");
+        println!("       herdr plugin <subcommand> ...");
         println!();
-        println!("Common commands:");
+        println!("{}:", t!("cli.root_common_commands"));
         for (command, description) in [
-            ("herdr", "Launch or attach to the persistent session"),
-            (
-                "herdr status [server|client]",
-                "Show local client and running server status",
-            ),
-            ("herdr update", "Download and install the latest version"),
-            ("herdr completion zsh", "Generate shell completions for zsh"),
-            (
-                "herdr server stop",
-                "Stop the running server via the API socket",
-            ),
+            ("herdr", t!("cli.root_launch_about")),
+            ("herdr status [server|client]", t!("cli.status_about")),
+            ("herdr update", t!("cli.update_about")),
+            ("herdr completion zsh", t!("cli.completion_about")),
+            ("herdr server stop", t!("cli.server_stop_about")),
             (
                 "herdr channel set <stable|preview>",
-                "Choose the stable or preview update channel",
+                t!("cli.channel_set_about"),
             ),
             (
                 "herdr server reload-config",
-                "Reload config.toml in the running server",
+                t!("cli.server_reload_config_about"),
             ),
-            (
-                "herdr config reset-keys",
-                "Back up config.toml and remove custom keybindings",
-            ),
-            (
-                "herdr channel <subcommand>",
-                "Manage the stable or preview update channel",
-            ),
-            (
-                "herdr api <subcommand>",
-                "Inspect socket API metadata and live runtime state",
-            ),
-            (
-                "herdr workspace <subcommand>",
-                "Workspace helpers over the socket API",
-            ),
-            (
-                "herdr worktree <subcommand>",
-                "Git worktree helpers over the socket API",
-            ),
-            ("herdr tab <subcommand>", "Tab helpers over the socket API"),
+            ("herdr config reset-keys", t!("cli.config_reset_keys_about")),
+            ("herdr channel <subcommand>", t!("cli.channel_about")),
+            ("herdr api <subcommand>", t!("cli.api_about")),
+            ("herdr workspace <subcommand>", t!("cli.workspace_about")),
+            ("herdr worktree <subcommand>", t!("cli.worktree_about")),
+            ("herdr tab <subcommand>", t!("cli.tab_about")),
             (
                 "herdr notification <subcommand>",
-                "Notification helpers over the socket API",
+                t!("cli.notification_about"),
             ),
-            (
-                "herdr agent <subcommand>",
-                "Agent/terminal helpers over the socket API",
-            ),
-            (
-                "herdr pane <subcommand>",
-                "Pane control helpers over the socket API",
-            ),
-            (
-                "herdr session <subcommand>",
-                "Manage named persistent sessions",
-            ),
+            ("herdr agent <subcommand>", t!("cli.agent_about")),
+            ("herdr pane <subcommand>", t!("cli.pane_about")),
+            ("herdr terminal <subcommand>", t!("cli.terminal_about")),
+            ("herdr session <subcommand>", t!("cli.session_about")),
             (
                 "herdr integration <subcommand>",
-                "Manage built-in agent integrations",
+                t!("cli.integration_about"),
             ),
+            ("herdr plugin <subcommand>", t!("cli.plugin_about")),
         ] {
             println!("  {command:<32} {description}");
         }
         println!();
-        println!("Advanced commands:");
-        println!("  {:<32} Run as headless server", "herdr server");
+        println!("{}:", t!("cli.root_advanced_commands"));
+        println!("  {:<32} {}", "herdr server", t!("cli.server_about"));
         println!();
-        println!("Options:");
-        println!("  --no-session        Run monolithically (no server/client, escape hatch)");
-        println!("  --session <name>    Use or create a named persistent session");
-        println!("  --remote <target>   Attach through SSH to a remote Herdr server");
-        println!("  --remote-keybindings <local|server>");
-        println!("                      Keybindings for --remote app attach (default: local)");
-        println!("  --handoff           Opt into live handoff for update or remote attach");
-        println!("  --default-config    Print default configuration and exit");
-        println!("  --skill             Print the agent skill file and exit");
-        println!("  --version, -V       Print version and exit");
-        println!("  --help, -h          Show this help");
+        println!("{}:", t!("cli.root_options_heading"));
+        for (option, description) in [
+            ("--no-session", t!("cli.no_session_help")),
+            ("--session <name>", t!("cli.session_help")),
+            ("--remote <target>", t!("cli.remote_help")),
+            (
+                "--remote-keybindings <local|server>",
+                t!("cli.remote_keybindings_help"),
+            ),
+            ("--handoff", t!("cli.handoff_help")),
+            ("--default-config", t!("cli.default_config_help")),
+            ("--skill", t!("cli.skill_help")),
+            ("--version, -V", t!("cli.version_help")),
+            ("--help, -h", t!("cli.help_help")),
+        ] {
+            println!("  {option:<40} {description}");
+        }
         println!();
-        println!("Config: {}", config::config_path().display());
-        println!("Logs:   {}", logging::help_log_paths_summary());
-        println!("Env:    HERDR_CONFIG_PATH overrides config file path");
-        println!("Home:   https://herdr.dev");
-        println!("Skill:  herdr --skill prints agent instructions for driving herdr from a pane");
+        println!(
+            "{}: {}",
+            t!("cli.root_config_label"),
+            config::config_path().display()
+        );
+        println!(
+            "{}:   {}",
+            t!("cli.root_logs_label"),
+            logging::help_log_paths_summary()
+        );
+        println!(
+            "{}:    {}",
+            t!("cli.root_env_label"),
+            t!("cli.root_config_override")
+        );
+        println!("{}:   https://herdr.dev", t!("cli.root_home_label"));
+        println!(
+            "{}:  {}",
+            t!("cli.root_skill_label"),
+            t!("cli.root_skill_hint")
+        );
         return Ok(());
     }
 

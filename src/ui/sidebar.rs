@@ -87,7 +87,7 @@ fn agent_panel_sort_label(sort: AgentPanelSort) -> String {
 }
 
 pub(crate) fn agent_panel_toggle_rect(area: Rect, sort: AgentPanelSort) -> Rect {
-    agent_panel_header_label_rect(area, agent_panel_sort_label(sort))
+    agent_panel_header_label_rect(area, &agent_panel_sort_label(sort))
 }
 
 fn agent_panel_header_label_rect(area: Rect, label: &str) -> Rect {
@@ -788,12 +788,16 @@ pub(crate) fn agent_panel_body_rect(area: Rect, has_scrollbar: bool) -> Rect {
 }
 
 fn resolved_agent_rows(app: &AppState, entry: &AgentPanelEntry) -> Vec<Vec<ResolvedToken>> {
-    let label = entry
+    if let Some(label) = entry
         .state_labels
         .get(agent_panel_status_key(entry.state, entry.seen))
         .map(String::as_str)
-        .unwrap_or_else(|| state_label(entry.state, entry.seen));
-    tokens::agent_rows(&app.sidebar_agents, entry, label)
+    {
+        tokens::agent_rows(&app.sidebar_agents, entry, label)
+    } else {
+        let label = state_label(entry.state, entry.seen);
+        tokens::agent_rows(&app.sidebar_agents, entry, label.as_ref())
+    }
 }
 
 pub(crate) fn agent_entry_height_in_body(
@@ -1743,7 +1747,10 @@ fn render_workspace_list(
                     "● ",
                     Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(t!("common.menu").to_string(), Style::default().fg(p.overlay0)),
+                Span::styled(
+                    t!("common.menu").to_string(),
+                    Style::default().fg(p.overlay0),
+                ),
             ])
         } else {
             Line::from(vec![Span::styled(
@@ -1783,8 +1790,13 @@ fn render_agent_detail(
         )])),
         Rect::new(area.x, area.y + 1, area.width, 1),
     );
-    let control_label = active_agent_view_label(app)
-        .unwrap_or_else(|| agent_panel_sort_label(app.agent_panel_sort));
+    let sort_label;
+    let control_label = if let Some(label) = active_agent_view_label(app) {
+        label
+    } else {
+        sort_label = agent_panel_sort_label(app.agent_panel_sort);
+        &sort_label
+    };
     let toggle_rect = agent_panel_header_label_rect(area, control_label);
     if toggle_rect != Rect::default() {
         let color = if app.agent_view_override.is_some() {

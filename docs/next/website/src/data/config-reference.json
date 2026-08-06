@@ -601,9 +601,14 @@
         },
         {
           "key": "ui.copy_on_select",
-          "type": "boolean",
-          "default": "true",
-          "description": "Automatically copy text selected by mouse drag or double-click. When disabled, Ctrl+C or a host-forwarded Cmd+C copies and clears the retained selection."
+          "type": "enum",
+          "default": "\"clipboard\"",
+          "description": "Mouse selection behavior. clipboard copies immediately; manual (or boolean false) retains the selection for Ctrl/Cmd+C, Enter, or y to copy and Esc to clear; disabled turns mouse selection off entirely. Boolean true maps to clipboard.",
+          "values": [
+            "disabled",
+            "clipboard",
+            "manual"
+          ]
         },
         {
           "key": "ui.host_cursor",
@@ -747,6 +752,16 @@
           "type": "color",
           "default": "\"cyan\"",
           "description": "Accent color for highlights, borders, and navigation UI. Accepts hex (#89b4fa), named colors (cyan, blue), or RGB (rgb(137,180,250))."
+        },
+        {
+          "key": "ui.language",
+          "type": "enum",
+          "default": "\"en\"",
+          "description": "UI and CLI language. en selects English; zh and values beginning with zh select Simplified Chinese. The locale is embedded and works on Linux, macOS, and Windows.",
+          "values": [
+            "en",
+            "zh"
+          ]
         }
       ]
     },

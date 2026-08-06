@@ -255,6 +255,10 @@ yellow = "#f9e2af"
 
 侧边栏是 Herdr 的主仪表盘。在[配置参考](/docs/config-reference/)中搜索 `ui.`，可查看尺寸、折叠模式、Agent 面板排序、鼠标行为、窗格边框和其他显示设置。
 
+在 `[ui]` 下设置 `language = "zh"`，即可使用内嵌的简体中文界面和 CLI 翻译。该设置在所有平台共用；Windows 的默认配置路径是 `%APPDATA%\herdr\config.toml`，Linux 和 macOS 则是 `~/.config/herdr/config.toml`。`zh-CN`、`zh-Hans` 等以 `zh` 开头的值也会启用中文；默认值 `en` 使用英文。
+
+`copy_on_select = true` 和 `copy_on_select = "clipboard"` 保持默认行为：鼠标拖选或双击终端文本后立即复制。设置为 `false` 或 `"manual"` 时，选区会保持高亮，按 `Ctrl+C`、宿主转发的 `Cmd+C`、`Enter` 或 `y` 复制，按 `Esc` 取消。设置为 `"disabled"` 会完全禁用鼠标文本选择和复制。
+
 ### 侧边栏行布局
 
 展开的桌面侧边栏会将 `rows` 中的每个内层数组渲染为一行。以下是完整的默认布局：

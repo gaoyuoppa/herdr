@@ -1,7 +1,6 @@
 use crate::config::{
     Keybinds, NewTerminalCwdConfig, SoundConfig, TabBarPositionConfig, ToastConfig, ToastDelivery,
 };
-use std::borrow::Cow;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Direction, Rect};
 use ratatui::style::Color;
@@ -1074,6 +1073,7 @@ impl SettingsSection {
         Self::Integrations,
     ];
 
+    #[cfg(test)]
     pub fn label(self) -> &'static str {
         match self {
             Self::Theme => "theme",
@@ -1089,10 +1089,10 @@ impl SettingsSection {
     pub fn display_label(self) -> String {
         match self {
             Self::Theme => t!("state.theme"),
+            Self::Indicators => t!("state.indicators"),
             Self::Sound => t!("state.sound"),
             Self::Toast => t!("state.toasts"),
             Self::PaneLabels => t!("state.pane_labels"),
-            Self::Experiments => t!("state.experiments"),
             Self::Integrations => t!("state.integrations"),
         }
         .to_string()
@@ -1800,7 +1800,7 @@ pub struct AppState {
     /// Capture mouse input for Herdr's own mouse UI. When false, Herdr only
     /// captures mouse while the focused pane app requests mouse reporting.
     pub mouse_capture: bool,
-    pub copy_on_select: bool,
+    pub copy_on_select: crate::config::CopyOnSelectModeConfig,
     pub right_click_passthrough_modifiers: Option<KeyModifiers>,
     pub right_click_passthrough: Option<RightClickPassthroughGesture>,
     pub redraw_on_focus_gained: bool,
@@ -2463,7 +2463,7 @@ impl AppState {
             sidebar_spaces: crate::config::SpacesSidebarConfig::default(),
             next_agent_state_change_seq: 0,
             mouse_capture: true,
-            copy_on_select: true,
+            copy_on_select: crate::config::CopyOnSelectModeConfig::Clipboard,
             right_click_passthrough_modifiers: None,
             right_click_passthrough: None,
             redraw_on_focus_gained: true,

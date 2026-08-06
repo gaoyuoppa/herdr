@@ -259,6 +259,10 @@ Color values accept hex, named colors, `rgb(r,g,b)`, or reset aliases like `rese
 
 The sidebar is the main Herdr dashboard. Search `ui.` in the [Config reference](/docs/config-reference/) for sizing, collapsed mode, Agent panel ordering, mouse behavior, pane borders, and other presentation settings.
 
+Set `language = "zh"` under `[ui]` to use the embedded Simplified Chinese UI and CLI translations. The setting is shared by every platform; on Windows the default config path is `%APPDATA%\herdr\config.toml`, while Linux and macOS use `~/.config/herdr/config.toml`. Values beginning with `zh`, including `zh-CN` and `zh-Hans`, select Chinese; `en` is the default.
+
+`copy_on_select = true` and `copy_on_select = "clipboard"` keep the default behavior: drag-selecting or double-clicking terminal text copies it immediately. Set it to `false` or `"manual"` to retain the selection until `Ctrl+C`, a host-forwarded `Cmd+C`, `Enter`, or `y` copies it; `Esc` cancels it. Set it to `"disabled"` to disable mouse text selection and copying.
+
 Set `tab_bar_position = "bottom"` under `[ui]` to place the desktop tab row below the terminal panes. Prefix, Navigate, Copy, and Resize mode bars temporarily replace the bottom tab row while active. The default is `"top"`.
 
 Agent status uses compact colored dots by default. To distinguish blocked, working, done, idle, and unknown states by shape as well as color, choose **distinct symbols** in Settings or configure:

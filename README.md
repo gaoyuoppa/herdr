@@ -52,7 +52,7 @@ https://github.com/user-attachments/assets/043ec09f-4bdd-41d5-aee0-8fda6b83e267
 
 ### 使用本 Fork 定制版
 
-从默认定制分支构建：
+Linux 从默认定制分支构建：
 
 ```bash
 git clone --branch deploy/zh-with-perf https://github.com/gaoyuoppa/herdr.git
@@ -60,7 +60,36 @@ cd herdr
 cargo build --release --locked
 ```
 
-项目当前使用 Rust 1.96.1 和 Zig 0.15.2。Linux 自动化仅生成 `x86_64-unknown-linux-musl` 静态二进制。
+Windows x64 推荐直接下载 **Sync upstream, build, and deploy** 工作流中的
+`herdr-windows-x86_64-<commit>` 构建产物。解压后的目录包含本地化
+`herdr.exe`、经过哈希和 Microsoft 签名验证的 ConPTY 运行库及第三方声明，整个目录可直接移动使用。
+
+```powershell
+# 在解压目录中启动；目录加入 PATH 后可省略 .exe 和相对路径
+.\herdr.exe
+herdr
+```
+
+Herdr 是终端程序，不是桌面 GUI；Windows 的程序文件名必须是 `herdr.exe`，但并不要求双击，通常在 PowerShell、CMD 或 Windows Terminal 中通过 `herdr` 命令启动。若自行编译：
+
+```powershell
+git clone --branch deploy/zh-with-perf https://github.com/gaoyuoppa/herdr.git
+Set-Location herdr
+cargo build --release --locked --target x86_64-pc-windows-msvc
+```
+
+项目当前使用 Rust 1.96.1 和 Zig 0.15.2。自动化生成
+`x86_64-unknown-linux-musl` 静态二进制，以及
+`x86_64-pc-windows-msvc` 的 Release ConPTY 便携包；Windows 包不会自动部署到 Linux 服务器。
+
+中文资源已直接编译进 Linux 和 Windows 程序。Windows 在
+`$env:APPDATA\herdr\config.toml`（通常是
+`%APPDATA%\herdr\config.toml`）中启用中文：
+
+```toml
+[ui]
+language = "zh"
+```
 
 ### 使用官方稳定版
 

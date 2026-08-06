@@ -4,6 +4,10 @@ The fork's default branch is `deploy/zh-with-perf`. The `master` branch is a
 fast-forward-only mirror of `herdrdev/herdr:master`; custom changes never land
 on it. The hourly workflow creates a temporary merge candidate and does not
 advance the custom branch until all checks and the Linux build pass.
+After the verified Linux commit is advanced and deployed, a native
+Windows Server 2022 job checks out that exact commit and builds the localized
+Windows x86_64 ConPTY package. The combined workflow is not considered
+recovered until that Windows job also succeeds.
 
 The workflow never opens an upstream issue or pull request. Failures are kept
 in the fork's single issue named
@@ -36,10 +40,22 @@ failure notifications in GitHub's notification settings.
 
 ## Deployment invariants
 
-Only `x86_64-unknown-linux-musl` is built. The workflow uses Rust 1.96.1, Zig
-0.15.2, `ReleaseFast`, and SIMD, matching the official Linux release build.
-It verifies static linking, unresolved C++ runtime symbols, binary version,
-protocol, and SHA-256 before uploading anything.
+The workflow builds `x86_64-unknown-linux-musl` and
+`x86_64-pc-windows-msvc`. Both use Rust 1.96.1, Zig 0.15.2, `ReleaseFast`, and
+SIMD. The Linux deployment gate verifies static linking, unresolved C++
+runtime symbols, binary version, protocol, and SHA-256 before uploading
+anything to the server.
+
+The Windows job runs the repository's native Windows checks, creates a Release
+binary, and verifies that `ui.language = "zh"` produces Simplified Chinese CLI
+help. It packages the binary with the pinned official ConPTY bundle, verifies
+the NuGet hash and signature, verifies Microsoft Authenticode signatures,
+probes enhanced ConPTY input, and exercises installation and repair through
+Windows PowerShell 5.1. The resulting
+`herdr-windows-x86_64-<commit>` Actions artifact contains
+`herdr-windows-x86_64.zip` and `BUILD_INFO.txt` with the source commit,
+toolchain, version, protocol, and SHA-256. It is retained for 14 days and is
+not deployed to the Linux host.
 
 The host-side deployer records workspace IDs and total Pane count before the
 handoff. It atomically replaces the installed binary, requests
@@ -68,4 +84,6 @@ in a disposable fork/branch before relying on the hourly schedule:
 2. deliberate merge conflict (custom branch and server stay unchanged);
 3. failing test/build (no deployment);
 4. unavailable SSH or rejected handoff (old service remains usable);
-5. two dispatches (the concurrency group serializes them).
+5. a Windows package build with Chinese `--help`, signed ConPTY files, and a
+   passing installer/repair test;
+6. two dispatches (the concurrency group serializes them).

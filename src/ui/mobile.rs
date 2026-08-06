@@ -585,7 +585,7 @@ fn render_mobile_switcher_content(
         content,
         doc_y,
         app.mobile_switcher_scroll,
-        &t!("mobile.spaces").to_string(),
+        t!("mobile.spaces").as_ref(),
         p,
     );
     doc_y += 1;
@@ -657,11 +657,7 @@ fn render_mobile_switcher_content(
             .branch()
             .map(|b| b.to_string())
             .unwrap_or_else(|| t!("nav.shell").to_string());
-        let detail = format!(
-            "{detail_prefix}{} · {}",
-            shell_label,
-            mobile_tab_status(ws)
-        );
+        let detail = format!("{detail_prefix}{} · {}", shell_label, mobile_tab_status(ws));
         render_two_line_item(
             frame,
             viewport,
@@ -683,7 +679,7 @@ fn render_mobile_switcher_content(
             content,
             doc_y,
             app.mobile_switcher_scroll,
-            &t!("mobile.tabs").to_string(),
+            t!("mobile.tabs").as_ref(),
             p,
         );
         doc_y += 1;
@@ -738,7 +734,7 @@ fn render_mobile_switcher_content(
         content,
         doc_y,
         app.mobile_switcher_scroll,
-        &t!("common.menu").to_string(),
+        t!("common.menu").as_ref(),
         p,
     );
     doc_y += 1;

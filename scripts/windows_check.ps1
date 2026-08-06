@@ -69,9 +69,12 @@ function Invoke-CargoTestFilter {
     }
 
     Write-Host "Running $($testNames.Count) test(s) for '$Filter'"
-    $runArguments = $commonArguments
+    # Several Windows tests temporarily replace PATH while probing command shims.
+    # Keep filtered suites serial so unrelated process-spawning tests cannot observe
+    # another test's temporary environment.
+    $runArguments = $commonArguments + @("--", "--test-threads=1")
     if ($Exact) {
-        $runArguments += @("--", "--exact")
+        $runArguments += "--exact"
     }
     Invoke-Checked cargo $runArguments
 }

@@ -19,6 +19,7 @@ env:
   CUSTOM_BRANCH: deploy/zh-with-perf
   UPSTREAM_REPOSITORY: herdrdev/herdr
   ARTIFACT_NAME: herdr-linux-x86_64
+  WINDOWS_ARTIFACT_NAME: herdr-windows-x86_64.zip
   HERDR_DEPLOY_HOST: ${{ vars.HERDR_DEPLOY_HOST }}
   HERDR_DEPLOY_PORT: ${{ vars.HERDR_DEPLOY_PORT }}
   HERDR_DEPLOY_USER: ${{ vars.HERDR_DEPLOY_USER }}
@@ -28,6 +29,10 @@ jobs:
   sync-build-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    outputs:
+      custom_sha: ${{ steps.source-state.outputs.custom_sha }}
+      upstream_sha: ${{ steps.source-state.outputs.upstream_sha }}
+      skip_pipeline: ${{ steps.source-state.outputs.skip_pipeline }}
 
     steps:
       - name: Check out the custom branch
@@ -456,23 +461,17 @@ jobs:
             < scripts/herdr_deploy.py
           trap - EXIT
 
-      - name: Close the automation issue after recovery
+      - name: Export verified source state
+        id: source-state
         if: success()
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           {
-            echo "FAILURE_STAGE=issue-recovery"
-            echo "FAILURE_SUMMARY=the successful run could not close the fork automation issue"
-          } >> "$GITHUB_ENV"
-          python3 scripts/herdr_automation_issue.py \
-            --repository "$GITHUB_REPOSITORY" \
-            recover \
-            --upstream-sha "$UPSTREAM_SHA" \
-            --custom-sha "$CUSTOM_SHA" \
-            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "custom_sha=$CUSTOM_SHA"
+            echo "upstream_sha=$UPSTREAM_SHA"
+            echo "skip_pipeline=$SKIP_PIPELINE"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Update the unique automation failure issue
         if: failure()
@@ -500,3 +499,195 @@ jobs:
             rm -f -- "$ssh_dir/deploy-key" "$ssh_dir/known_hosts"
             rmdir -- "$ssh_dir" 2>/dev/null || true
           fi
+
+  build-windows:
+    name: Build localized Windows x86_64 package
+    needs: sync-build-deploy
+    if: needs.sync-build-deploy.outputs.skip_pipeline != 'true'
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: ${{ needs.sync-build-deploy.outputs.custom_sha }}
+      UPSTREAM_SHA: ${{ needs.sync-build-deploy.outputs.upstream_sha }}
+      LIBGHOSTTY_VT_OPTIMIZE: ReleaseFast
+      LIBGHOSTTY_VT_SIMD: 'true'
+      HERDR_BUILD_CHANNEL: deploy
+      HERDR_BUILD_ID: ${{ github.run_number }}-${{ needs.sync-build-deploy.outputs.custom_sha }}-windows-zh
+      HERDR_BUILD_COMMIT: ${{ needs.sync-build-deploy.outputs.custom_sha }}
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}\vendor\libghostty-vt\.zig-cache
+      ZIG_LOCAL_CACHE_DIR: ${{ github.workspace }}\vendor\libghostty-vt\.zig-cache
+
+    steps:
+      - name: Check out the verified custom commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.sync-build-deploy.outputs.custom_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          components: rustfmt,clippy
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.15.2
+          use-cache: false
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          cache-bin: false
+          key: fork-automation-x86_64-pc-windows-msvc
+
+      - name: Remove stale Windows build caches
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Remove-Item -Recurse -Force .zig-cache -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force vendor/libghostty-vt/.zig-cache -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force vendor/libghostty-vt/zig-out -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force target/x86_64-pc-windows-msvc/release -ErrorAction SilentlyContinue
+
+      - name: Run native Windows checks
+        shell: pwsh
+        run: .\scripts\windows_check.ps1 -Mode check
+
+      - name: Build localized Windows release
+        shell: pwsh
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+
+      - name: Verify Windows binary and Simplified Chinese locale
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = (Resolve-Path -LiteralPath "target\x86_64-pc-windows-msvc\release\herdr.exe").Path
+          $client = (& $exe status client --json | ConvertFrom-Json)
+          if ((& $exe --version) -ne "herdr $($client.version)") {
+            throw "Windows binary version output does not match status client metadata"
+          }
+
+          $config = Join-Path $env:RUNNER_TEMP "herdr-zh-config.toml"
+          "[ui]`nlanguage = `"zh`"" | Set-Content -LiteralPath $config -Encoding utf8
+          try {
+            $env:HERDR_CONFIG_PATH = $config
+            $help = (& $exe --help | Out-String)
+          } finally {
+            Remove-Item Env:HERDR_CONFIG_PATH -ErrorAction SilentlyContinue
+          }
+          if (-not $help.Contains("AI 编程智能体的终端工作区管理器")) {
+            throw "Windows release did not load the embedded Simplified Chinese locale"
+          }
+
+          "HERDR_WINDOWS_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "EXPECTED_VERSION=$($client.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "EXPECTED_PROTOCOL=$($client.protocol)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build and verify official ConPTY package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
+          $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
+          $artifactDir = Join-Path $PWD "build-artifacts-windows"
+          $archive = Join-Path $artifactDir $env:WINDOWS_ARTIFACT_NAME
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+          .\scripts\package_windows_conpty.ps1 `
+            -HerdrExe $env:HERDR_WINDOWS_EXE `
+            -PackagePath $package `
+            -StageDir $stage `
+            -OutputPath $archive
+
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          @(
+            "commit=$env:SOURCE_SHA"
+            "upstream=$env:UPSTREAM_SHA"
+            "target=x86_64-pc-windows-msvc"
+            "rust=$env:RUST_TOOLCHAIN_VERSION"
+            "zig=0.15.2"
+            "libghostty_vt_optimize=$env:LIBGHOSTTY_VT_OPTIMIZE"
+            "libghostty_vt_simd=$env:LIBGHOSTTY_VT_SIMD"
+            "language=zh (verified)"
+            "version=$env:EXPECTED_VERSION"
+            "protocol=$env:EXPECTED_PROTOCOL"
+            "sha256=$hash  $env:WINDOWS_ARTIFACT_NAME"
+          ) | Out-File -LiteralPath (Join-Path $artifactDir "BUILD_INFO.txt") -Encoding utf8
+          "HERDR_CONPTY_PACKAGE_DIR=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "HERDR_WINDOWS_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Probe enhanced pane input with bundled ConPTY
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Join-Path $env:HERDR_CONPTY_PACKAGE_DIR "herdr.exe"
+          $consoleHost = Join-Path $env:HERDR_CONPTY_PACKAGE_DIR "conpty\x64\OpenConsole.exe"
+          .\scripts\windows_conpty_enhanced_input_probe.ps1 `
+            -ExePath $exe `
+            -Session "automation-windows-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" `
+            -ExpectedConsoleHostPath $consoleHost
+
+      - name: Test packaged installer and repair with Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+            .\scripts\windows_install_conpty_package_test.ps1 `
+            -ArchivePath $env:HERDR_WINDOWS_ARCHIVE
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows PowerShell installer test failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Upload verified Windows artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: herdr-windows-x86_64-${{ needs.sync-build-deploy.outputs.custom_sha }}
+          path: build-artifacts-windows/
+          retention-days: 14
+          if-no-files-found: error
+
+  report-automation-status:
+    name: Report combined automation status
+    needs: [sync-build-deploy, build-windows]
+    if: ${{ always() && needs.sync-build-deploy.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out automation reporting script
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.sync-build-deploy.outputs.custom_sha }}
+          persist-credentials: false
+
+      - name: Close the automation issue after full recovery
+        if: needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/herdr_automation_issue.py \
+            --repository "$GITHUB_REPOSITORY" \
+            recover \
+            --upstream-sha "${{ needs.sync-build-deploy.outputs.upstream_sha }}" \
+            --custom-sha "${{ needs.sync-build-deploy.outputs.custom_sha }}" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Update the unique automation issue for a Windows failure
+        if: needs.build-windows.result != 'success' && needs.build-windows.result != 'skipped'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/herdr_automation_issue.py \
+            --repository "$GITHUB_REPOSITORY" \
+            failure \
+            --stage "windows-build" \
+            --upstream-sha "${{ needs.sync-build-deploy.outputs.upstream_sha }}" \
+            --custom-sha "${{ needs.sync-build-deploy.outputs.custom_sha }}" \
+            --summary "the localized Windows x86_64 release, ConPTY package, or package verification failed" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

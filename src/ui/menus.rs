@@ -17,7 +17,9 @@ fn prefix_rhs_label(bindings: &crate::config::ActionKeybinds) -> String {
 }
 
 fn keybind_label(bindings: &crate::config::ActionKeybinds) -> String {
-    bindings.label().unwrap_or_else(|| t!("common.unset").to_string())
+    bindings
+        .label()
+        .unwrap_or_else(|| t!("common.unset").to_string())
 }
 
 fn render_bottom_bar(frame: &mut Frame, area: Rect, line: Line<'_>, bg: ratatui::style::Color) {
@@ -113,10 +115,7 @@ pub(super) fn render_copy_mode_overlay(app: &AppState, frame: &mut Frame, area: 
             Span::styled("/ ?", key),
             Span::styled(t!("menu.search_hint").to_string(), dim),
             Span::styled("n/N", key),
-            Span::styled(
-                format!(" {}{match_status}  ", t!("menu.repeat")),
-                dim,
-            ),
+            Span::styled(format!(" {}{match_status}  ", t!("menu.repeat")), dim),
             Span::styled("v/space", key),
             Span::styled(format!(" {select}  "), dim),
             Span::styled("y/enter", key),
@@ -251,7 +250,10 @@ pub(super) fn render_global_launcher_menu(app: &AppState, frame: &mut Frame) {
         let line = if app.global_menu_item_has_badge(item) {
             Line::from(vec![
                 Span::styled(" ●", badge_style),
-                Span::styled(format!(" {} ", app.global_menu_display_label(item)), item_style),
+                Span::styled(
+                    format!(" {} ", app.global_menu_display_label(item)),
+                    item_style,
+                ),
             ])
         } else {
             Line::from(Span::styled(

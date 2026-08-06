@@ -14,7 +14,6 @@ use crate::selection::Selection;
 use crate::terminal::{EffectiveStateChange, TerminalStateMutation};
 use crate::workspace::WorkspaceGitStatus;
 use rust_i18n::t;
-use unicode_width::UnicodeWidthChar;
 
 use super::api_helpers::pane_agent_status;
 use super::state::{
@@ -2247,7 +2246,7 @@ impl AppState {
             return false;
         }
 
-        let text = if self.copy_on_select {
+        let text = if self.copy_on_select == crate::config::CopyOnSelectModeConfig::Clipboard {
             let Some(text) = rt
                 .extract_selection(&selection)
                 .filter(|text| !text.is_empty())
@@ -2782,7 +2781,8 @@ impl AppState {
                 ) {
                     self.toast = Some(ToastNotification {
                         kind: ToastKind::UpdateInstalled,
-                        title: t!("toast.version_available", version = version.as_str()).to_string(),
+                        title: t!("toast.version_available", version = version.as_str())
+                            .to_string(),
                         context: crate::update::update_install_instruction(&install_command),
                         position: None,
                         target: None,

@@ -341,11 +341,10 @@ fn handle_manifest_announcement(version: &str, value: Option<&serde_json::Value>
 
 fn release_info_from_manifest(manifest: &UpdateManifest) -> Result<Option<ReleaseInfo>, String> {
     let current = Version::current();
-    let latest = Version::parse(&manifest.version)
-        .ok_or_else(|| {
-            let version = &manifest.version;
-            t!("update.invalid_version", version = version).to_string()
-        })?;
+    let latest = Version::parse(&manifest.version).ok_or_else(|| {
+        let version = &manifest.version;
+        t!("update.invalid_version", version = version).to_string()
+    })?;
 
     if !stable_channel_should_install(&latest, &current, crate::build_info::is_preview()) {
         return Ok(None); // up to date
@@ -555,9 +554,12 @@ impl Drop for DownloadedUpdate {
 /// Download a release to a prepared executable temp file without touching the running server.
 #[cfg(not(windows))]
 fn download_update(release: &ReleaseInfo) -> Result<DownloadedUpdate, String> {
-    let current_exe = env::current_exe().map_err(|e| t!("update.cant_find_binary", e = e).to_string())?;
+    let current_exe =
+        env::current_exe().map_err(|e| t!("update.cant_find_binary", e = e).to_string())?;
 
-    let parent = current_exe.parent().ok_or(t!("update.cant_find_binary_dir").to_string())?;
+    let parent = current_exe
+        .parent()
+        .ok_or(t!("update.cant_find_binary_dir").to_string())?;
 
     // Check write permissions early
     let test_path = parent.join(".herdr-write-test");
@@ -1136,7 +1138,11 @@ fn prompt_to_complete_plain_update(
     let noun = if plans.len() == 1 { singular } else { plural };
     eprintln!(
         "{}",
-        t!("update.must_stop_to_complete", count = plans.len(), noun = noun)
+        t!(
+            "update.must_stop_to_complete",
+            count = plans.len(),
+            noun = noun
+        )
     );
     eprintln!("{}", t!("update.stops_processes_warning"));
     for plan in plans {
@@ -1151,7 +1157,11 @@ fn prompt_to_complete_plain_update(
     loop {
         eprint!(
             "{}",
-            t!("update.stop_and_install_prompt", noun = noun, label = release.label())
+            t!(
+                "update.stop_and_install_prompt",
+                noun = noun,
+                label = release.label()
+            )
         );
         io::stderr()
             .flush()
@@ -1232,7 +1242,11 @@ fn live_handoff_running_server_for_update(
     wait_for_server_handoff_at(plan.socket_path(), SERVER_HANDOFF_CONFIRM_TIMEOUT, release)?;
     eprintln!(
         "{}",
-        t!("update.handoff_complete", noun = plan.target_noun(), label = plan.label())
+        t!(
+            "update.handoff_complete",
+            noun = plan.target_noun(),
+            label = plan.label()
+        )
     );
     Ok(())
 }
@@ -1269,7 +1283,11 @@ fn prompt_to_stop_old_server_after_failed_handoff(
 ) -> Result<bool, String> {
     eprintln!(
         "{}",
-        t!("update.handoff_failed_running", noun = plan.target_noun(), label = plan.label())
+        t!(
+            "update.handoff_failed_running",
+            noun = plan.target_noun(),
+            label = plan.label()
+        )
     );
     eprintln!("  server: v{}", version_label(status.version.as_deref()));
     eprintln!("  installed: {}", release.label());
@@ -1439,8 +1457,8 @@ fn send_server_update_method_at(
     if read == 0 || line.trim().is_empty() {
         return Err(format!("empty {error_prefix} response"));
     }
-    let response: serde_json::Value =
-        serde_json::from_str(&line).map_err(|e| t!("update.invalid_server_response", e = e).to_string())?;
+    let response: serde_json::Value = serde_json::from_str(&line)
+        .map_err(|e| t!("update.invalid_server_response", e = e).to_string())?;
     if let Some(error) = response.get("error") {
         return Err(format!("{error_prefix} failed: {error}"));
     }
@@ -1548,7 +1566,11 @@ fn wait_for_server_shutdown_at(socket_path: &Path, timeout: Duration) -> Result<
 fn stop_running_server_for_update(plan: &RunningServerUpdatePlan) -> Result<(), String> {
     eprintln!(
         "{}",
-        t!("update.stopping", noun = plan.target_noun(), label = plan.label())
+        t!(
+            "update.stopping",
+            noun = plan.target_noun(),
+            label = plan.label()
+        )
     );
     stop_server_via_api_at(plan.socket_path(), SERVER_STOP_RESPONSE_TIMEOUT)?;
     wait_for_server_shutdown_at(plan.socket_path(), SERVER_HANDOFF_CONFIRM_TIMEOUT)?;

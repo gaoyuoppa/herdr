@@ -138,9 +138,7 @@ fn status_command() -> Command {
 fn config_command() -> Command {
     Command::new("config")
         .about(t!("cli.config_about").to_string())
-        .subcommand(
-            Command::new("check").about(t!("cli.config_check_about").to_string()),
-        )
+        .subcommand(Command::new("check").about(t!("cli.config_check_about").to_string()))
         .subcommand(Command::new("reset-keys").about(t!("cli.config_reset_keys_about").to_string()))
 }
 
@@ -149,12 +147,14 @@ fn channel_command() -> Command {
         .about(t!("cli.channel_about").to_string())
         .subcommand(Command::new("show").about(t!("cli.channel_show_about").to_string()))
         .subcommand(
-            Command::new("set").about(t!("cli.channel_set_about").to_string()).arg(
-                Arg::new("channel")
-                    .value_name("CHANNEL")
-                    .required(true)
-                    .value_parser(["stable", "preview"]),
-            ),
+            Command::new("set")
+                .about(t!("cli.channel_set_about").to_string())
+                .arg(
+                    Arg::new("channel")
+                        .value_name("CHANNEL")
+                        .required(true)
+                        .value_parser(["stable", "preview"]),
+                ),
         )
 }
 
@@ -162,7 +162,9 @@ fn server_command() -> Command {
     Command::new("server")
         .about(t!("cli.server_about").to_string())
         .subcommand(Command::new("stop").about(t!("cli.server_stop_about").to_string()))
-        .subcommand(Command::new("reload-config").about(t!("cli.server_reload_config_about").to_string()))
+        .subcommand(
+            Command::new("reload-config").about(t!("cli.server_reload_config_about").to_string()),
+        )
         .subcommand(
             Command::new("agent-manifests")
                 .about(t!("cli.server_agent_manifests_about").to_string())
@@ -204,8 +206,16 @@ fn workspace_command() -> Command {
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
-        .subcommand(id_command("get", "workspace_id", t!("cli.workspace_get_about").to_string()))
-        .subcommand(id_command("focus", "workspace_id", t!("cli.workspace_focus_about").to_string()))
+        .subcommand(id_command(
+            "get",
+            "workspace_id",
+            t!("cli.workspace_get_about").to_string(),
+        ))
+        .subcommand(id_command(
+            "focus",
+            "workspace_id",
+            t!("cli.workspace_focus_about").to_string(),
+        ))
         .subcommand(
             Command::new("rename")
                 .about(t!("cli.workspace_rename_about").to_string())
@@ -222,7 +232,11 @@ fn workspace_command() -> Command {
                 .arg(option("seq", "N"))
                 .arg(option("ttl-ms", "N")),
         )
-        .subcommand(id_command("close", "workspace_id", t!("cli.workspace_close_about").to_string()))
+        .subcommand(id_command(
+            "close",
+            "workspace_id",
+            t!("cli.workspace_close_about").to_string(),
+        ))
 }
 
 fn worktree_command() -> Command {
@@ -283,15 +297,27 @@ fn tab_command() -> Command {
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
-        .subcommand(id_command("get", "tab_id", t!("cli.tab_get_about").to_string()))
-        .subcommand(id_command("focus", "tab_id", t!("cli.tab_focus_about").to_string()))
+        .subcommand(id_command(
+            "get",
+            "tab_id",
+            t!("cli.tab_get_about").to_string(),
+        ))
+        .subcommand(id_command(
+            "focus",
+            "tab_id",
+            t!("cli.tab_focus_about").to_string(),
+        ))
         .subcommand(
             Command::new("rename")
                 .about(t!("cli.tab_rename_about").to_string())
                 .arg(required("tab_id", "TAB_ID"))
                 .arg(required("label", "LABEL").num_args(1..)),
         )
-        .subcommand(id_command("close", "tab_id", t!("cli.tab_close_about").to_string()))
+        .subcommand(id_command(
+            "close",
+            "tab_id",
+            t!("cli.tab_close_about").to_string(),
+        ))
 }
 
 fn notification_command() -> Command {
@@ -710,14 +736,20 @@ fn terminal_command() -> Command {
                         .about(t!("cli.terminal_set_about").to_string())
                         .arg(required("title", "TITLE")),
                 )
-                .subcommand(Command::new("clear").about(t!("cli.terminal_clear_about").to_string())),
+                .subcommand(
+                    Command::new("clear").about(t!("cli.terminal_clear_about").to_string()),
+                ),
         )
 }
 
 fn session_command() -> Command {
     Command::new("session")
         .about(t!("cli.session_about").to_string())
-        .subcommand(Command::new("list").about(t!("cli.session_list_about").to_string()).arg(json_flag()))
+        .subcommand(
+            Command::new("list")
+                .about(t!("cli.session_list_about").to_string())
+                .arg(json_flag()),
+        )
         .subcommand(
             Command::new("attach")
                 .about(t!("cli.session_attach_about").to_string())

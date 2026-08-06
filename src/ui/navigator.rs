@@ -101,7 +101,7 @@ fn render_search(app: &AppState, frame: &mut Frame, area: Rect) {
         format!(
             "{:>width$} {}",
             count,
-            t!("common.panes").to_string(),
+            t!("common.panes"),
             width = area.width.saturating_sub(16) as usize
         ),
         Style::default().fg(p.overlay0),
@@ -400,10 +400,7 @@ fn workspace_detail(
     };
     let label = ws.display_name_from(&app.terminals, terminal_runtimes);
     let pane_count = ws.tabs.iter().map(|tab| tab.panes.len()).sum::<usize>();
-    let mut parts = vec![
-        label,
-        format!("{} {}", pane_count, t!("common.panes")),
-    ];
+    let mut parts = vec![label, format!("{} {}", pane_count, t!("common.panes"))];
     if !rowless_workspace_activity(app, terminal_runtimes, ws_idx).is_empty() {
         parts.push(rowless_workspace_activity(app, terminal_runtimes, ws_idx));
     }
@@ -424,7 +421,13 @@ fn tab_detail(
     };
     let mut parts = vec![
         ws.display_name_from(&app.terminals, terminal_runtimes),
-        t!("nav.tab_label", name = ws.tab_display_name(tab_idx).unwrap_or_else(|| (tab_idx + 1).to_string())).to_string(),
+        t!(
+            "nav.tab_label",
+            name = ws
+                .tab_display_name(tab_idx)
+                .unwrap_or_else(|| (tab_idx + 1).to_string())
+        )
+        .to_string(),
         format!("{} {}", tab.panes.len(), t!("common.panes")),
     ];
     let rows = app.navigator_rows_from(terminal_runtimes);

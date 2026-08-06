@@ -17,7 +17,7 @@ $installerAst = [System.Management.Automation.Language.Parser]::ParseFile(
 if ($parseErrors.Count -ne 0) {
     throw ($parseErrors | Out-String)
 }
-foreach ($functionName in @("Prepend-PathEntry", "Update-PathRegistryEntry")) {
+foreach ($functionName in @("Prepend-PathEntry", "Update-PathRegistryEntry", "Publish-EnvironmentChange")) {
     $definition = $installerAst.FindAll(
         {
             param($node)
@@ -67,6 +67,22 @@ try {
     $testEnvironmentKey.Dispose()
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($testRegistryPath, $false)
     [Environment]::SetEnvironmentVariable($pathTestVariable, $oldPathTestVariable, "Process")
+}
+
+$oldProcessPath = [Environment]::GetEnvironmentVariable("Path", "Process")
+$userEnvironmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $false)
+if ($null -eq $userEnvironmentKey) {
+    throw "unable to open the user environment registry key"
+}
+try {
+    $oldUserPathExists = @($userEnvironmentKey.GetValueNames()) -contains "Path"
+    if ($oldUserPathExists) {
+        $options = [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+        $oldUserPath = $userEnvironmentKey.GetValue("Path", $null, $options)
+        $oldUserPathKind = $userEnvironmentKey.GetValueKind("Path")
+    }
+} finally {
+    $userEnvironmentKey.Dispose()
 }
 
 $archive = (Resolve-Path -LiteralPath $ArchivePath).Path
@@ -201,9 +217,27 @@ try {
         throw "installer accepted a manifest that did not match the updater-selected build"
     }
 } finally {
-    $env:HERDR_HOME = $oldHerdrHome
-    if ($null -ne $server -and -not $server.HasExited) {
-        Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+    try {
+        $env:HERDR_HOME = $oldHerdrHome
+        if ($null -ne $server -and -not $server.HasExited) {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    } finally {
+        [Environment]::SetEnvironmentVariable("Path", $oldProcessPath, "Process")
+        $userEnvironmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
+        if ($null -eq $userEnvironmentKey) {
+            throw "unable to restore the user environment registry key"
+        }
+        try {
+            if ($oldUserPathExists) {
+                $userEnvironmentKey.SetValue("Path", $oldUserPath, $oldUserPathKind)
+            } else {
+                $userEnvironmentKey.DeleteValue("Path", $false)
+            }
+        } finally {
+            $userEnvironmentKey.Dispose()
+        }
+        Publish-EnvironmentChange
     }
-    Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }

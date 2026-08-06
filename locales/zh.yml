@@ -1,6 +1,18 @@
 # CLI 命令帮助
 cli:
   herdr_about: "AI 编程智能体的终端工作区管理器"
+  root_usage_heading: "用法"
+  root_common_commands: "常用命令"
+  root_advanced_commands: "高级命令"
+  root_options_heading: "选项"
+  root_launch_about: "启动或附加到持久会话"
+  root_config_label: "配置"
+  root_logs_label: "日志"
+  root_env_label: "环境变量"
+  root_home_label: "主页"
+  root_skill_label: "技能"
+  root_config_override: "HERDR_CONFIG_PATH 可覆盖配置文件路径"
+  root_skill_hint: "herdr --skill 可输出从窗格驱动 herdr 的智能体说明"
   no_session_help: "以单体模式运行，不使用 server/client 会话模式"
   session_help: "使用或创建一个命名的持久会话"
   remote_help: "通过 SSH 连接到远端 Herdr 服务器"
@@ -424,6 +436,7 @@ mobile:
 # state label/context menu (app/state.rs)
 state:
   theme: "主题"
+  indicators: "状态指示器"
   sound: "声音"
   toasts: "通知"
   pane_labels: "窗格标签"

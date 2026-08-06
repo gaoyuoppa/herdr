@@ -201,18 +201,22 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(" ↑↓", Style::default().fg(p.overlay0)),
-                Span::styled(t!("settings.select_hint").to_string(), Style::default().fg(p.overlay1)),
+                Span::styled(
+                    t!("settings.select_hint").to_string(),
+                    Style::default().fg(p.overlay1),
+                ),
                 Span::styled("tab", Style::default().fg(p.overlay0)),
-                Span::styled(t!("settings.section_hint").to_string(), Style::default().fg(p.overlay1)),
+                Span::styled(
+                    t!("settings.section_hint").to_string(),
+                    Style::default().fg(p.overlay1),
+                ),
             ])),
             footer_rows[0],
         );
     }
 }
 
-pub(crate) fn settings_primary_button_label(
-    section: crate::app::state::SettingsSection,
-) -> String {
+pub(crate) fn settings_primary_button_label(section: crate::app::state::SettingsSection) -> String {
     match section {
         crate::app::state::SettingsSection::Integrations => t!("common.install").to_string(),
         _ => t!("common.apply").to_string(),

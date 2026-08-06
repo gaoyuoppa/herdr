@@ -63,7 +63,7 @@
 - Empty clipboard writes from pane applications no longer erase existing clipboard contents or show a copied confirmation. (#1893)
 - Plain mouse movement no longer triggers continuous full renders while preserving Herdr menu hover and pane application mouse tracking. (#1865)
 - Extended-button drags now preserve Herdr hover state while applications receive the drag.
-- `ui.copy_on_select = false` now retains drag and double-click word selections without copying; `Ctrl+C`, or `Cmd+C` when the host terminal forwards it, copies and clears the selection. (#1782)
+- `ui.copy_on_select = false` or `"manual"` now retains drag and double-click word selections without copying; `Ctrl+C`, a host-forwarded `Cmd+C`, `Enter`, or `y` copies and clears the selection, while `Esc` cancels it. Use `"disabled"` to turn mouse text selection off entirely. (#1782)
 - Pane and agent read responses now report `truncated: true` when older terminal rows were omitted. (#1717)
 - Pane applications that query OSC 4 palette colors now inherit the host terminal palette. (#1752)
 - Ctrl-clicking a pane URL no longer forwards an unmatched mouse release to alternate-screen applications, preventing duplicate browser tabs. (#1761)

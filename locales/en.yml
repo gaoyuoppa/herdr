@@ -1,6 +1,18 @@
 # CLI 命令帮助 (cli/spec.rs)
 cli:
   herdr_about: "terminal workspace manager for AI coding agents"
+  root_usage_heading: "Usage"
+  root_common_commands: "Common commands"
+  root_advanced_commands: "Advanced commands"
+  root_options_heading: "Options"
+  root_launch_about: "Launch or attach to the persistent session"
+  root_config_label: "Config"
+  root_logs_label: "Logs"
+  root_env_label: "Env"
+  root_home_label: "Home"
+  root_skill_label: "Skill"
+  root_config_override: "HERDR_CONFIG_PATH overrides config file path"
+  root_skill_hint: "herdr --skill prints agent instructions for driving herdr from a pane"
   no_session_help: "Run monolithically without server/client session mode"
   session_help: "Use or create a named persistent session"
   remote_help: "Attach through SSH to a remote Herdr server"
@@ -424,6 +436,7 @@ mobile:
 # state label/context menu (app/state.rs)
 state:
   theme: "theme"
+  indicators: "indicators"
   sound: "sound"
   toasts: "toasts"
   pane_labels: "pane labels"

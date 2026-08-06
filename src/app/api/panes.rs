@@ -2123,6 +2123,7 @@ impl PaneMoveTransaction {
                         moved,
                         direction,
                         ratio,
+                        focus,
                     ) {
                     Ok(pane_id) => pane_id,
                     Err(moved) => {

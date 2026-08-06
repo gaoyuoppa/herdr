@@ -606,6 +606,11 @@ impl App {
     }
 
     fn handle_pane_double_click(&mut self, mouse: MouseEvent) -> bool {
+        if self.state.copy_on_select.is_disabled() {
+            self.last_pane_click = None;
+            return false;
+        }
+
         // A pane press stops being a double-click candidate once it becomes
         // a drag or completes as a real text selection.
         match mouse.kind {
@@ -690,9 +695,8 @@ impl App {
             click.col,
         );
         if selected {
-            self.selection_highlight_clear_deadline = self
-                .state
-                .copy_on_select
+            self.selection_highlight_clear_deadline = (self.state.copy_on_select
+                == crate::config::CopyOnSelectModeConfig::Clipboard)
                 .then(|| std::time::Instant::now() + super::PANE_COPY_HIGHLIGHT_DURATION);
         }
         selected

@@ -126,10 +126,16 @@ pub(super) fn render_release_notes_overlay(app: &AppState, frame: &mut Frame, ar
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!(" {} ", t!("common.scroll")), Style::default().fg(app.palette.overlay0)),
+            Span::styled(
+                format!(" {} ", t!("common.scroll")),
+                Style::default().fg(app.palette.overlay0),
+            ),
             Span::styled("wheel ↑↓", Style::default().fg(app.palette.text)),
             Span::styled("  ·  ", Style::default().fg(app.palette.overlay0)),
-            Span::styled(t!("common.close").to_string(), Style::default().fg(app.palette.overlay0)),
+            Span::styled(
+                t!("common.close").to_string(),
+                Style::default().fg(app.palette.overlay0),
+            ),
             Span::styled(" esc / enter ", Style::default().fg(app.palette.text)),
         ])),
         stack.footer.unwrap_or_default(),
@@ -238,10 +244,16 @@ pub(super) fn render_product_announcement_overlay(app: &AppState, frame: &mut Fr
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!(" {} ", t!("common.scroll")), Style::default().fg(app.palette.overlay0)),
+            Span::styled(
+                format!(" {} ", t!("common.scroll")),
+                Style::default().fg(app.palette.overlay0),
+            ),
             Span::styled("wheel ↑↓", Style::default().fg(app.palette.text)),
             Span::styled("  ·  ", Style::default().fg(app.palette.overlay0)),
-            Span::styled(t!("common.close").to_string(), Style::default().fg(app.palette.overlay0)),
+            Span::styled(
+                t!("common.close").to_string(),
+                Style::default().fg(app.palette.overlay0),
+            ),
             Span::styled(" esc / enter ", Style::default().fg(app.palette.text)),
         ])),
         stack.footer.unwrap_or_default(),
