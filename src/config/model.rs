@@ -134,8 +134,8 @@ impl StatusIndicatorStyle {
 #[serde(rename_all = "lowercase")]
 pub enum CopyOnSelectModeConfig {
     Disabled,
-    #[default]
     Clipboard,
+    #[default]
     Manual,
 }
 
@@ -324,7 +324,7 @@ pub enum ShellModeConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct TerminalConfig {
-    /// Executable used for new interactive panes. Empty means SHELL, then /bin/sh.
+    /// Executable used for new interactive panes. Empty uses the platform fallback chain.
     pub default_shell: String,
     /// Startup mode for new interactive pane shells.
     pub shell_mode: ShellModeConfig,
@@ -888,7 +888,7 @@ pub struct UiConfig {
     /// Capture mouse input for Herdr's mouse UI. Default: true.
     pub mouse_capture: bool,
     /// Mouse selection behavior: clipboard, manual, or disabled. Also accepts true/false.
-    /// Default: clipboard.
+    /// Default: manual.
     pub copy_on_select: CopyOnSelectModeConfig,
     /// Host cursor policy. Default: auto.
     pub host_cursor: HostCursorModeConfig,
@@ -1113,7 +1113,7 @@ impl Default for UiConfig {
             sidebar_collapsed_mode: SidebarCollapsedModeConfig::Compact,
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,
-            copy_on_select: CopyOnSelectModeConfig::Clipboard,
+            copy_on_select: CopyOnSelectModeConfig::Manual,
             host_cursor: HostCursorModeConfig::Auto,
             right_click_passthrough_modifier: RightClickPassthroughModifierConfig::default(),
             redraw_on_focus_gained: true,
@@ -1583,11 +1583,11 @@ mouse_capture = false
     }
 
     #[test]
-    fn copy_on_select_accepts_official_booleans_and_extended_modes() {
+    fn copy_on_select_defaults_manual_and_accepts_supported_modes() {
         let default_config = Config::default();
         assert_eq!(
             default_config.ui.copy_on_select,
-            CopyOnSelectModeConfig::Clipboard
+            CopyOnSelectModeConfig::Manual
         );
 
         for (value, expected) in [

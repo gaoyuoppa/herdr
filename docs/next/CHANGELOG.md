@@ -10,7 +10,14 @@
 - Added right-click preview and commit workflows for repositioning existing panes or applying columns, rows, balanced-grid, main-left, and main-top templates without restarting pane processes, backed by the new atomic `layout.rearrange` socket method.
 - Expanded Space sidebar entries now use stable alternating backgrounds and a separator between unrelated top-level entries or worktree groups; worktree parents and their indented children remain packed together.
 
+### Changed
+- Mouse text selection now defaults to manual copying on every platform: drag-selecting or double-clicking retains the selection until `Ctrl+C`, a host-forwarded `Cmd+C`, `Enter`, or `y` copies it; `Esc` cancels it. Set `ui.copy_on_select = "clipboard"` to opt back into immediate copying.
+
 ### Fixed
+- Windows clients now reopen their current Windows Terminal window at its previous size and position, including maximized state, without restoring unrelated Terminal windows; the packaged elevated profile also routes new instances into the most recently used Terminal window instead of opening another top-level window.
+- Settings dialogs now stay open when clicking non-interactive content or borders; they close through the Close action, Escape, or clicks outside the dialog on every supported platform.
+- New Windows panes now prefer PowerShell 7, then fall back to Windows PowerShell and Command Prompt when the earlier shell is unavailable.
+- Windows clients started normally can now attach to an existing elevated same-user server, and elevated clients can attach to a normally started server, without an `Access is denied` named-pipe failure.
 - Configs containing the retired Herdr-written `ui.agent_panel_scope` setting no longer report it as an unknown key after upgrades. (#2292)
 - Claude Code confirmation prompts using `Enter to confirm · Esc to cancel` now report `blocked` instead of `idle`. (#2268)
 - Sidebar agent lists keep scrolling when differently sized clients are attached to the same session. (#2255, thanks @aiworkflowpro)

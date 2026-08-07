@@ -261,7 +261,7 @@ The sidebar is the main Herdr dashboard. Search `ui.` in the [Config reference](
 
 Set `language = "zh"` under `[ui]` to use the embedded Simplified Chinese UI and CLI translations. The setting is shared by every platform; on Windows the default config path is `%APPDATA%\herdr\config.toml`, while Linux and macOS use `~/.config/herdr/config.toml`. Values beginning with `zh`, including `zh-CN` and `zh-Hans`, select Chinese; `en` is the default.
 
-`copy_on_select = true` and `copy_on_select = "clipboard"` keep the default behavior: drag-selecting or double-clicking terminal text copies it immediately. Set it to `false` or `"manual"` to retain the selection until `Ctrl+C`, a host-forwarded `Cmd+C`, `Enter`, or `y` copies it; `Esc` cancels it. Set it to `"disabled"` to disable mouse text selection and copying.
+Mouse selection defaults to manual copying: drag-selecting or double-clicking terminal text retains the selection until `Ctrl+C`, a host-forwarded `Cmd+C`, `Enter`, or `y` copies it; `Esc` cancels it. Set `copy_on_select = true` or `copy_on_select = "clipboard"` to copy immediately after selecting. The equivalent manual values are `false` and `"manual"`; `"disabled"` turns mouse text selection off entirely.
 
 Set `tab_bar_position = "bottom"` under `[ui]` to place the desktop tab row below the terminal panes. Prefix, Navigate, Copy, and Resize mode bars temporarily replace the bottom tab row while active. The default is `"top"`.
 

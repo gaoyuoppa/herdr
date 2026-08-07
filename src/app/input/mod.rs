@@ -821,13 +821,11 @@ fn state_with_workspaces(names: &[&str]) -> AppState {
 #[cfg(test)]
 fn app_for_mouse_test() -> App {
     let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut app = App::new(
-        &crate::config::Config::default(),
-        true,
-        None,
-        api_rx,
-        crate::api::EventHub::default(),
-    );
+    // Most mouse fixtures characterize the legacy immediate-copy path. Keep
+    // that opt-in explicit now that production defaults to manual copying.
+    let mut config = crate::config::Config::default();
+    config.ui.copy_on_select = crate::config::CopyOnSelectModeConfig::Clipboard;
+    let mut app = App::new(&config, true, None, api_rx, crate::api::EventHub::default());
     app.state.mode = Mode::Terminal;
     app.state.update_available = None;
     app.state.latest_release_notes_available = false;

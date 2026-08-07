@@ -602,8 +602,8 @@
         {
           "key": "ui.copy_on_select",
           "type": "enum",
-          "default": "\"clipboard\"",
-          "description": "Mouse selection behavior. clipboard copies immediately; manual (or boolean false) retains the selection for Ctrl/Cmd+C, Enter, or y to copy and Esc to clear; disabled turns mouse selection off entirely. Boolean true maps to clipboard.",
+          "default": "\"manual\"",
+          "description": "Mouse selection behavior. manual (the default, also boolean false) retains the selection for Ctrl/Cmd+C, Enter, or y to copy and Esc to clear; clipboard (or boolean true) copies immediately; disabled turns mouse selection off entirely.",
           "values": [
             "disabled",
             "clipboard",

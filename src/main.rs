@@ -274,10 +274,11 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Pane apps like lazygit and btop can still receive mouse when they request it.
 # mouse_capture = true
 
-# Mouse selection behavior: true or "clipboard" copies immediately; false or
-# "manual" retains the selection for Ctrl/Cmd+C, Enter, or y to copy and Esc to cancel.
+# Mouse selection behavior: false or "manual" (the default) retains the selection
+# for Ctrl/Cmd+C, Enter, or y to copy and Esc to cancel. Use true or "clipboard"
+# to copy immediately after selecting.
 # Use "disabled" to disable mouse text selection and copying entirely.
-# copy_on_select = "clipboard"
+# copy_on_select = "manual"
 
 # Host cursor policy: "auto", "native", or "drawn".
 # "auto" draws Herdr's own cursor on native Windows builds and WSL to avoid ConPTY cursor flicker, and uses the native terminal cursor elsewhere.

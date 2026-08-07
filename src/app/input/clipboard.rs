@@ -241,10 +241,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn copy_on_select_manual_enter_and_y_copy_retained_selection() {
+    async fn copy_on_select_defaults_manual_and_enter_and_y_copy_retained_selection() {
         for code in [KeyCode::Enter, KeyCode::Char('y')] {
             let (mut app, info, mut input_rx) = app_with_screen_bytes_and_input(b"alpha beta");
-            app.state.copy_on_select = crate::config::CopyOnSelectModeConfig::Manual;
+            app.state.copy_on_select = crate::config::Config::default().ui.copy_on_select;
+            assert_eq!(
+                app.state.copy_on_select,
+                crate::config::CopyOnSelectModeConfig::Manual
+            );
             drag_select_range(&mut app, &info, 0, 4);
 
             app.handle_terminal_key_headless(TerminalKey::new(code, KeyModifiers::empty()));
