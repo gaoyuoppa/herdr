@@ -56,6 +56,14 @@ class CrossPlatformGateTests(unittest.TestCase):
         self.assertIn('"scripts.test_vendor_libghostty_vt"', script)
         self.assertIn('"scripts.test_vendor_portable_pty"', script)
 
+    def test_windows_local_check_runs_shared_sidebar_boundary_regression(self) -> None:
+        script = WINDOWS_CHECK.read_text(encoding="utf-8")
+
+        self.assertIn(
+            '"ui::sidebar::tests::desktop_worktree_connector_uses_full_list_at_viewport_boundary"',
+            script,
+        )
+
     def test_promotion_waits_for_linux_and_windows_candidate_gates(self) -> None:
         workflow = SYNC_WORKFLOW.read_text(encoding="utf-8")
         linux = job_body(workflow, "prepare-linux-candidate")

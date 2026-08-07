@@ -50,6 +50,7 @@ upstream merge needs semantic conflict resolution.
 | Linux-only Clippy lints | A Windows cross-target `cargo check` can miss warnings in `cfg(unix)` code. Keep the Windows-to-Linux musl gate on Clippy with warnings denied. |
 | Translation key namespaces | Missing rust-i18n keys compile and render as their dotted key names. Keep `scripts.test_i18n_key_check` in both native gates so every literal `t!` key exists in both `en.yml` and `zh.yml`. |
 | Maintenance tests on Windows | Read repository text as UTF-8, compare tracked paths in POSIX form, and keep `*.patch` files LF-only. Run the same Python maintenance suite in both native gates. |
+| Shared layout boundary tests | Fix the split ratio and assert the intended viewport height before testing truncation. Keep high-value shared regressions in the selective native Windows suite instead of relying on Unix-only full tests. |
 
 The 2026-08-07 rehearsal against upstream `69a07fdf` had one semantic conflict,
 in `docs/next/website/src/content/docs/keyboard.mdx`: keep upstream's big-word

@@ -3289,10 +3289,12 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
         ];
         app.sidebar_spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
         app.sidebar_spaces.row_gap = 0;
-        let area = Rect::new(0, 0, 30, 12);
+        app.sidebar_section_split = 0.5;
+        let area = Rect::new(0, 0, 30, 10);
+        let list_area = workspace_list_rect(area, app.sidebar_section_split);
+        assert_eq!(workspace_list_body_rect(list_area, false).height, 2);
         app.view.workspace_card_areas = compute_workspace_card_areas(&app, area);
         assert_eq!(app.view.workspace_card_areas.len(), 2);
-        let list_area = workspace_list_rect(area, app.sidebar_section_split);
 
         let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
         terminal
