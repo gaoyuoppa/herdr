@@ -220,6 +220,11 @@ fn background_update_check_enabled(no_session: bool, check_enabled: bool) -> boo
     auto_updates_enabled(no_session) && check_enabled
 }
 
+fn background_version_update_check_enabled(no_session: bool, check_enabled: bool) -> bool {
+    background_update_check_enabled(no_session, check_enabled)
+        && crate::build_info::official_updates_enabled()
+}
+
 fn load_plugin_registry(no_session: bool) -> crate::app::state::InstalledPluginRegistry {
     if no_session {
         return std::collections::HashMap::new();
@@ -703,7 +708,7 @@ impl App {
         // and in debug/test builds so local development never mutates the
         // running binary out from under spawned test processes.
         let version_check_enabled =
-            background_update_check_enabled(no_session, config.update.version_check);
+            background_version_update_check_enabled(no_session, config.update.version_check);
         let manifest_check_enabled =
             background_update_check_enabled(no_session, config.update.manifest_check);
         if version_check_enabled {
@@ -809,7 +814,8 @@ impl App {
         app.no_session = false;
         app.state.installed_plugins = load_plugin_registry(app.no_session);
         let now = Instant::now();
-        if background_update_check_enabled(app.no_session, app.update_version_check_enabled) {
+        if background_version_update_check_enabled(app.no_session, app.update_version_check_enabled)
+        {
             app.next_auto_update_check = app
                 .state
                 .update_available
@@ -1516,7 +1522,7 @@ impl App {
             if !self.update_version_check_enabled {
                 self.next_auto_update_check = None;
             } else if !previous_version_check_enabled
-                && background_update_check_enabled(
+                && background_version_update_check_enabled(
                     self.no_session,
                     self.update_version_check_enabled,
                 )
@@ -2798,8 +2804,15 @@ mod tests {
 
         let app = test_app();
 
-        assert_eq!(app.state.update_available.as_deref(), Some("99.99.99"));
-        assert!(app.state.latest_release_notes_available);
+        let official_updates_enabled = crate::build_info::official_updates_enabled();
+        assert_eq!(
+            app.state.update_available.as_deref(),
+            official_updates_enabled.then_some("99.99.99")
+        );
+        assert_eq!(
+            app.state.latest_release_notes_available,
+            official_updates_enabled
+        );
 
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
@@ -2816,7 +2829,10 @@ mod tests {
         let app = test_app();
 
         assert_eq!(app.state.update_available, None);
-        assert!(app.state.latest_release_notes_available);
+        assert_eq!(
+            app.state.latest_release_notes_available,
+            crate::build_info::official_updates_enabled()
+        );
 
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
@@ -2840,7 +2856,10 @@ mod tests {
 
         assert_eq!(app.state.mode, Mode::Navigate);
         assert!(app.state.release_notes.is_none());
-        assert!(app.state.latest_release_notes_available);
+        assert_eq!(
+            app.state.latest_release_notes_available,
+            crate::build_info::official_updates_enabled()
+        );
 
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());

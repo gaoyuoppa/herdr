@@ -1621,7 +1621,7 @@ mod tests {
     }
 
     #[test]
-    fn global_menu_whats_new_opens_saved_release_notes() {
+    fn global_menu_whats_new_obeys_build_update_policy() {
         let _guard = config_env_lock().lock().unwrap();
         let path = temp_config_path("whats-new-saved-release-notes");
         std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
@@ -1635,14 +1635,20 @@ mod tests {
 
         apply_global_menu_action(&mut state, GlobalMenuAction::WhatsNew);
 
-        assert_eq!(state.mode, Mode::ReleaseNotes);
-        assert_eq!(
-            state
-                .release_notes
-                .as_ref()
-                .map(|notes| notes.body.as_str()),
-            Some("### Changed\n- Menu")
-        );
+        if crate::build_info::official_updates_enabled() {
+            assert_eq!(state.mode, Mode::ReleaseNotes);
+            assert_eq!(
+                state
+                    .release_notes
+                    .as_ref()
+                    .map(|notes| notes.body.as_str()),
+                Some("### Changed\n- Menu")
+            );
+        } else {
+            assert_ne!(state.mode, Mode::ReleaseNotes);
+            assert!(state.release_notes.is_none());
+            assert!(!crate::release_notes::pending_path().exists());
+        }
 
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());

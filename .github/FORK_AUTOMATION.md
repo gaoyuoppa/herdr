@@ -53,6 +53,7 @@ upstream merge needs semantic conflict resolution.
 | Shared UI and layout tests | Fix the split ratio and assert the intended viewport height before testing truncation. A localized label must not undo an upstream narrow-screen fallback; measure terminal cell width, not UTF-8 bytes. Keep the shared UI suite in the native Windows gate instead of relying on Unix-only full tests. |
 | Packaged PowerShell defaults | Windows PowerShell 5.1 can evaluate `$PSScriptRoot` as empty inside a `param(...)` default expression. Resolve package-relative executable and icon paths in the script body, and test the packaged installer without explicit path overrides. |
 | Windows command processor | Terminal launchers can repurpose inherited `ComSpec` to point at themselves. Resolve `cmd.exe` from the Windows system directory and normalize `ComSpec` for pane, plugin, custom-command, and batch-file descendants; never treat arbitrary `ComSpec` as an executable path. |
+| Managed deploy updates | Binaries built with `HERDR_BUILD_CHANNEL=deploy` must only be updated by the dual-platform deployment workflow. Keep official background/manual self-update disabled on both platforms and discard cached official release notes so local patches cannot be overwritten. Agent detection manifest updates remain independent and enabled. |
 
 The 2026-08-07 rehearsal against upstream `69a07fdf` had one semantic conflict,
 in `docs/next/website/src/content/docs/keyboard.mdx`: keep upstream's big-word
@@ -119,7 +120,8 @@ The workflow builds `x86_64-unknown-linux-musl` and
 Zig 0.15.2, `ReleaseFast`, and SIMD. The Linux gate verifies static linking,
 unresolved C++ runtime symbols, binary version, protocol, and SHA-256. The
 custom branch and Linux server remain unchanged until this gate and the native
-Windows gate both succeed.
+Windows gate both succeed. Both artifacts must also reject `herdr update` with
+the managed-build protection before they can be promoted.
 
 The Windows job runs the repository's native Windows checks, creates a Release
 binary, and verifies that `ui.language = "zh"` produces Simplified Chinese CLI

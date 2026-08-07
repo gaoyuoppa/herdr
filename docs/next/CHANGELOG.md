@@ -14,6 +14,7 @@
 - Mouse text selection now defaults to manual copying on every platform: drag-selecting or double-clicking retains the selection until `Ctrl+C`, a host-forwarded `Cmd+C`, `Enter`, or `y` copies it; `Esc` cancels it. Set `ui.copy_on_select = "clipboard"` to opt back into immediate copying.
 
 ### Fixed
+- Fork-managed `deploy` builds no longer advertise or install official stable/preview updates, preventing local patches from being overwritten; stale official update notices are discarded on both Windows and Linux.
 - Windows clients now reopen their current Windows Terminal window at its previous size and position, including maximized state, without restoring unrelated Terminal windows; the packaged elevated profile also routes new instances into the most recently used Terminal window instead of opening another top-level window.
 - Settings dialogs now stay open when clicking non-interactive content or borders; they close through the Close action, Escape, or clicks outside the dialog on every supported platform.
 - New Windows panes now prefer PowerShell 7, then fall back to Windows PowerShell and Command Prompt when the earlier shell is unavailable.

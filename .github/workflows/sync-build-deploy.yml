@@ -381,6 +381,11 @@ jobs:
           expected_version="$(jq -er '.version' <<<"$client_json")"
           expected_protocol="$(jq -er '.protocol' <<<"$client_json")"
           [[ "$("$artifact" --version)" == "herdr $expected_version" ]]
+          if update_output="$("$artifact" update 2>&1)"; then
+            echo "error: deploy build unexpectedly allowed official self-update" >&2
+            exit 1
+          fi
+          grep -Fq "self-update is disabled for deploy builds" <<<"$update_output"
           artifact_sha256="$(sha256sum "$artifact" | awk '{print $1}')"
           {
             echo "commit=$CUSTOM_SHA"
@@ -574,6 +579,14 @@ jobs:
           $client = (& $exe status client --json | ConvertFrom-Json)
           if ((& $exe --version) -ne "herdr $($client.version)") {
             throw "Windows binary version output does not match status client metadata"
+          }
+
+          $updateOutput = (& $exe update 2>&1 | Out-String)
+          if ($LASTEXITCODE -eq 0) {
+            throw "deploy build unexpectedly allowed official self-update"
+          }
+          if (-not $updateOutput.Contains("self-update is disabled for deploy builds")) {
+            throw "deploy build did not report the expected self-update protection: $updateOutput"
           }
 
           $config = Join-Path $env:RUNNER_TEMP "herdr-zh-config.toml"

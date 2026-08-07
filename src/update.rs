@@ -1983,6 +1983,16 @@ fn homebrew_cellar_keg_root(path: &Path) -> Option<PathBuf> {
 
 /// Manual self-update command (`herdr update`).
 pub fn self_update(options: SelfUpdateOptions) -> Result<Version, String> {
+    if !crate::build_info::official_updates_enabled() {
+        if let Err(err) = crate::release_notes::clear_pending() {
+            tracing::warn!("failed to discard stale official release notes: {err}");
+        }
+        return Err(format!(
+            "self-update is disabled for {} builds; install updates through the distribution deployment workflow",
+            crate::build_info::channel()
+        ));
+    }
+
     let channel = UpdateChannel::configured();
     #[cfg(windows)]
     if channel == UpdateChannel::Stable {
@@ -2116,8 +2126,8 @@ fn print_outdated_integration_notice_with_updated_binary(updated_exe: &Path) {
 /// Background update check: only surface availability and release notes.
 /// Runs in a background thread at startup.
 pub fn auto_update(events: tokio::sync::mpsc::Sender<crate::events::AppEvent>) {
-    crate::logging::update_check_started();
     if let Ok(version) = env::var(FAKE_UPDATE_VERSION_ENV) {
+        crate::logging::update_check_started();
         let version = version.trim();
         if !version.is_empty() {
             tracing::info!(
@@ -2137,6 +2147,19 @@ pub fn auto_update(events: tokio::sync::mpsc::Sender<crate::events::AppEvent>) {
         }
         return;
     }
+
+    if !crate::build_info::official_updates_enabled() {
+        if let Err(err) = crate::release_notes::clear_pending() {
+            tracing::warn!("failed to discard stale official release notes: {err}");
+        }
+        tracing::info!(
+            build_channel = crate::build_info::channel(),
+            "skipping official update check for externally managed build"
+        );
+        return;
+    }
+
+    crate::logging::update_check_started();
 
     let configured_channel = UpdateChannel::configured();
     if is_homebrew_managed_install() {
