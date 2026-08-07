@@ -51,6 +51,7 @@ use crossterm::{
 };
 use ratatui::layout::Rect;
 use ratatui::DefaultTerminal;
+use rust_i18n::t;
 use tokio::sync::{mpsc, Notify};
 use tracing::info;
 
@@ -1307,7 +1308,7 @@ impl App {
         if targets.is_empty() {
             self.state
                 .integration_install_messages
-                .push("all detected integrations are current".to_string());
+                .push(t!("settings.integrations_current").to_string());
             return;
         }
 
@@ -1315,9 +1316,9 @@ impl App {
             let label = crate::integration::integration_target_label(target);
             match crate::integration::install_target(target) {
                 Ok(messages) => {
-                    self.state
-                        .integration_install_messages
-                        .push(format!("installed {label}"));
+                    self.state.integration_install_messages.push(
+                        t!("settings.integration_installed_named", label = label).to_string(),
+                    );
                     self.state
                         .integration_install_messages
                         .extend(messages.into_iter().filter(|message| {

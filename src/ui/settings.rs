@@ -108,14 +108,18 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
             render_settings_theme(app, frame, content_area);
         }
         SettingsSection::Indicators => {
+            let title = t!("settings.status_indicators").to_string();
+            let description = t!("settings.status_indicators_desc").to_string();
+            let color_dots = format!("{}  ● ● ● ○ ·", t!("settings.color_dots"));
+            let distinct_symbols = format!("{}  × ◐ ✓ ○ ·", t!("settings.distinct_symbols"));
             render_modal_choice_list(
                 frame,
                 content_area,
-                "agent status indicators",
-                "choose color dots or distinct symbols for each state",
+                &title,
+                &description,
                 &[
-                    ("color dots  ● ● ● ○ ·", StatusIndicatorStyle::Dots),
-                    ("distinct symbols  × ◐ ✓ ○ ·", StatusIndicatorStyle::Symbols),
+                    (&color_dots, StatusIndicatorStyle::Dots),
+                    (&distinct_symbols, StatusIndicatorStyle::Symbols),
                 ],
                 app.status_indicators,
                 app.settings.list.selected,
@@ -354,13 +358,27 @@ fn render_settings_integrations(app: &AppState, frame: &mut Frame, area: Rect) {
                 Style::default().fg(p.overlay0)
             }
         };
+        let status_label = match (item.available, item.state) {
+            (_, crate::integration::IntegrationStatusKind::Current) => {
+                t!("settings.integration_installed").to_string()
+            }
+            (_, crate::integration::IntegrationStatusKind::Outdated) => {
+                t!("settings.integration_update_available").to_string()
+            }
+            (true, crate::integration::IntegrationStatusKind::NotInstalled) => {
+                t!("settings.integration_available").to_string()
+            }
+            (false, crate::integration::IntegrationStatusKind::NotInstalled) => {
+                t!("settings.integration_not_found").to_string()
+            }
+        };
         lines.push(Line::from(vec![
             Span::styled(format!(" {marker} "), marker_style),
             Span::styled(
                 format!("{:<9}", item.label),
                 Style::default().fg(p.subtext0),
             ),
-            Span::styled(item.status_label(), Style::default().fg(p.overlay1)),
+            Span::styled(status_label, Style::default().fg(p.overlay1)),
         ]));
     }
 
@@ -415,12 +433,14 @@ fn render_settings_toggle(
     current_value: bool,
     selected_idx: usize,
 ) {
+    let on = t!("common.on").to_string();
+    let off = t!("common.off").to_string();
     render_modal_choice_list(
         frame,
         area,
         title,
         description,
-        &[("on", true), ("off", false)],
+        &[(&on, true), (&off, false)],
         current_value,
         selected_idx,
         p,
