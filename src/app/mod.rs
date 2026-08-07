@@ -1736,7 +1736,19 @@ impl App {
                     self.handle_text_commit_headless(text.as_str());
                 }
                 crate::raw_input::RawInputEvent::Mouse(mouse) => {
-                    if self.state.popup_pane.is_some() || self.state.mouse_capture {
+                    #[cfg(windows)]
+                    if std::env::var_os("HERDR_WINDOWS_INPUT_TRACE").is_some() {
+                        tracing::info!(
+                            kind = ?mouse.kind,
+                            column = mouse.column,
+                            row = mouse.row,
+                            mode = ?self.state.mode,
+                            mouse_capture = self.state.mouse_capture,
+                            route_to_ui = self.state.should_route_host_mouse_to_ui(),
+                            "windows input trace: server mouse route"
+                        );
+                    }
+                    if self.state.should_route_host_mouse_to_ui() {
                         self.handle_mouse_event_headless(source_id, mouse);
                     } else {
                         self.state
@@ -6270,6 +6282,65 @@ last_pane = "prefix+tab"
         );
         assert!(popup_rx.try_recv().is_ok());
         assert!(tiled_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn route_client_events_routes_settings_mouse_when_global_capture_is_disabled() {
+        let mut app = test_app();
+        app.state.view.sidebar_rect = ratatui::layout::Rect::new(0, 0, 20, 40);
+        app.state.view.terminal_area = ratatui::layout::Rect::new(20, 0, 100, 40);
+        app.state.mouse_capture = false;
+        input::open_settings_at(&mut app.state, state::SettingsSection::Theme);
+        assert!(app
+            .state
+            .should_capture_host_mouse_from(&app.terminal_runtimes));
+
+        let content = app.state.settings_content_rect();
+        let target = usize::from(app.state.settings.list.selected == 0);
+        app.route_client_events(
+            vec![crate::raw_input::RawInputEvent::Mouse(
+                crossterm::event::MouseEvent {
+                    kind: crossterm::event::MouseEventKind::Down(
+                        crossterm::event::MouseButton::Left,
+                    ),
+                    column: content.x + 1,
+                    row: content.y + target as u16,
+                    modifiers: crossterm::event::KeyModifiers::NONE,
+                },
+            )],
+            true,
+        );
+
+        assert_eq!(app.state.settings.list.selected, target);
+        assert_eq!(app.state.mode, Mode::Settings);
+    }
+
+    #[tokio::test]
+    async fn raw_input_routes_settings_mouse_when_global_capture_is_disabled() {
+        let mut app = test_app();
+        app.state.view.sidebar_rect = ratatui::layout::Rect::new(0, 0, 20, 40);
+        app.state.view.terminal_area = ratatui::layout::Rect::new(20, 0, 100, 40);
+        app.state.mouse_capture = false;
+        input::open_settings_at(&mut app.state, state::SettingsSection::Theme);
+
+        let content = app.state.settings_content_rect();
+        let target = usize::from(app.state.settings.list.selected == 0);
+        assert!(
+            app.handle_raw_input_event(crate::raw_input::RawInputEvent::Mouse(
+                crossterm::event::MouseEvent {
+                    kind: crossterm::event::MouseEventKind::Down(
+                        crossterm::event::MouseButton::Left,
+                    ),
+                    column: content.x + 1,
+                    row: content.y + target as u16,
+                    modifiers: crossterm::event::KeyModifiers::NONE,
+                },
+            ))
+            .await
+        );
+
+        assert_eq!(app.state.settings.list.selected, target);
+        assert_eq!(app.state.mode, Mode::Settings);
     }
 
     #[test]

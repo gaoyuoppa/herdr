@@ -9139,6 +9139,37 @@ next_tab = ""
     }
 
     #[tokio::test]
+    async fn settings_forces_host_mouse_capture_for_headless_client() {
+        let mut server = test_headless_server();
+        let (client_tx, client_control_rx, _client_rx) = test_client_writer();
+        server.clients.insert(
+            1,
+            ClientConnection::new(
+                (80, 24),
+                crate::kitty_graphics::HostCellSize::default(),
+                crate::terminal_theme::TerminalTheme::default(),
+                None,
+                1,
+                RenderEncoding::SemanticFrame,
+                Some(client_tx),
+            ),
+        );
+        server.app.state.mouse_capture = false;
+        server.app.state.mode = crate::app::Mode::Settings;
+
+        server.stream_host_mouse_capture_mode();
+
+        assert!(matches!(
+            read_server_message(
+                client_control_rx
+                    .recv_timeout(Duration::from_millis(100))
+                    .expect("mouse capture message")
+            ),
+            ServerMessage::MouseCapture { enabled: true }
+        ));
+    }
+
+    #[tokio::test]
     async fn command_mode_updates_headless_client_keyboard_flags() {
         let mut server = test_headless_server();
         let (client_tx, client_control_rx, _client_rx) = test_client_writer();

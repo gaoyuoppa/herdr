@@ -2247,9 +2247,12 @@ impl AppState {
         &self,
         terminal_runtimes: &crate::terminal::TerminalRuntimeRegistry,
     ) -> bool {
-        self.mouse_capture
-            || self.popup_pane.is_some()
+        self.should_route_host_mouse_to_ui()
             || self.focused_pane_requests_mouse_capture_from(terminal_runtimes)
+    }
+
+    pub(crate) fn should_route_host_mouse_to_ui(&self) -> bool {
+        self.mouse_capture || self.popup_pane.is_some() || self.mode != Mode::Terminal
     }
 
     pub fn is_prefix_key(&self, key: &crate::input::TerminalKey) -> bool {
