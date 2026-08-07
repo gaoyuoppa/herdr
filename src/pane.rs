@@ -1457,10 +1457,10 @@ fn pane_shell_command_builder_for_target(
     target: ShellLaunchTarget,
 ) -> io::Result<CommandBuilder> {
     let shell = pane_shell(shell_config.default_shell);
-    if shell_mode_uses_login_shell(shell_config.mode, target) {
+    let cmd = if shell_mode_uses_login_shell(shell_config.mode, target) {
         let mut cmd = CommandBuilder::new_default_prog();
         cmd.env("SHELL", resolve_shell_for_login_mode(&shell)?);
-        Ok(cmd)
+        cmd
     } else {
         let mut cmd = CommandBuilder::new(&shell);
         if uses_windows_powershell_pane_shell_for_target(shell_config, target) {
@@ -1470,8 +1470,15 @@ fn pane_shell_command_builder_for_target(
                 WINDOWS_POWERSHELL_SHELL_INTEGRATION_COMMAND,
             ]);
         }
-        Ok(cmd)
+        cmd
+    };
+    #[cfg(windows)]
+    let mut cmd = cmd;
+    #[cfg(windows)]
+    if target == ShellLaunchTarget::Windows {
+        cmd.env("ComSpec", crate::platform::system_command_processor());
     }
+    Ok(cmd)
 }
 
 fn pane_shell_command_builder(shell_config: PaneShellConfig<'_>) -> io::Result<CommandBuilder> {
@@ -3317,6 +3324,11 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd.get_argv(), &[std::ffi::OsString::from("cmd.exe")]);
+        #[cfg(windows)]
+        {
+            let command_processor = crate::platform::system_command_processor();
+            assert_eq!(cmd.get_env("ComSpec"), Some(command_processor.as_os_str()));
+        }
     }
 
     #[test]

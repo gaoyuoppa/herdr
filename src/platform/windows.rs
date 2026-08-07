@@ -52,6 +52,7 @@ use windows_sys::{
                 MEMORY_BASIC_INFORMATION,
             },
             Ole::{CF_DIB, CF_DIBV5, CF_UNICODETEXT},
+            SystemInformation::GetSystemDirectoryW,
             Threading::{
                 GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, OpenProcess,
                 QueryFullProcessImageNameW, TerminateProcess, CREATE_NO_WINDOW, DETACHED_PROCESS,
@@ -316,10 +317,31 @@ fn next_pane_runtime_marker() -> String {
     format!("{:x}-{timestamp:x}-{counter:x}", std::process::id())
 }
 
-fn raw_command_shell(comspec: Option<std::ffi::OsString>) -> std::ffi::OsString {
-    comspec
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| r"C:\Windows\System32\cmd.exe".into())
+pub(crate) fn system_command_processor() -> std::ffi::OsString {
+    use std::os::windows::ffi::OsStringExt as _;
+
+    // GetSystemDirectoryW is independent of inherited environment variables.
+    // Some terminal launchers repurpose ComSpec to point at themselves, which
+    // must not redirect batch files or recursively launch the terminal host.
+    let mut buffer = vec![0_u16; 260];
+    loop {
+        let length = unsafe { GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32) };
+        if length == 0 {
+            break;
+        }
+        let length = length as usize;
+        if length < buffer.len() {
+            return PathBuf::from(std::ffi::OsString::from_wide(&buffer[..length]))
+                .join("cmd.exe")
+                .into_os_string();
+        }
+        if length > 32_768 {
+            break;
+        }
+        buffer.resize(length, 0);
+    }
+
+    r"C:\Windows\System32\cmd.exe".into()
 }
 
 pub(crate) fn interactive_shell_command(argv: &[String], shell_name: &str) -> Option<String> {
@@ -392,34 +414,24 @@ fn cmd_encoded_powershell_command(script: &str) -> String {
 }
 
 pub(crate) fn detached_custom_command_process_platform(command: &str) -> std::process::Command {
-    detached_custom_command_process_with_comspec(command, std::env::var_os("ComSpec"))
-}
-
-fn detached_custom_command_process_with_comspec(
-    command: &str,
-    comspec: Option<std::ffi::OsString>,
-) -> std::process::Command {
     use std::os::windows::process::CommandExt;
 
-    let mut process = std::process::Command::new(raw_command_shell(comspec));
+    let command_processor = system_command_processor();
+    let mut process = std::process::Command::new(&command_processor);
     process.arg("/d").arg("/c").raw_arg(command);
+    process.env("ComSpec", command_processor);
     process
 }
 
 pub(crate) fn pane_custom_command_pty_builder_platform(
     command: &str,
 ) -> portable_pty::CommandBuilder {
-    pane_custom_command_pty_builder_with_comspec(command, std::env::var_os("ComSpec"))
-}
-
-fn pane_custom_command_pty_builder_with_comspec(
-    command: &str,
-    comspec: Option<std::ffi::OsString>,
-) -> portable_pty::CommandBuilder {
-    let mut builder = portable_pty::CommandBuilder::new(raw_command_shell(comspec));
+    let command_processor = system_command_processor();
+    let mut builder = portable_pty::CommandBuilder::new(&command_processor);
     builder.arg("/d");
     builder.arg("/c");
     builder.raw_arg(command);
+    builder.env("ComSpec", command_processor);
     builder
 }
 
@@ -2200,9 +2212,10 @@ mod tests {
         ];
         let inherited_path = std::env::var_os("PATH").unwrap_or_default();
         let path = format!("{};{}", base.display(), inherited_path.to_string_lossy());
+        let command_processor = super::system_command_processor();
         let run_command = |shell: &str, command: &str, capture: &std::path::Path| {
             let mut process = if shell == "cmd.exe" {
-                let mut process = Command::new("cmd.exe");
+                let mut process = Command::new(&command_processor);
                 process.args(["/d", "/c", command]);
                 process
             } else {
@@ -2212,6 +2225,7 @@ mod tests {
             };
             process
                 .env("PATH", &path)
+                .env("ComSpec", &command_processor)
                 .env("HERDR_ARGV_CAPTURE", capture)
                 .status()
                 .unwrap()
@@ -2409,28 +2423,30 @@ mod tests {
 
     #[test]
     fn pane_custom_command_uses_cmd() {
-        let builder = super::pane_custom_command_pty_builder_with_comspec(
-            "echo hello",
-            Some(r"C:\Windows\System32\cmd.exe".into()),
-        );
+        let command_processor = super::system_command_processor();
+        let builder = super::pane_custom_command_pty_builder_platform("echo hello");
 
         assert_eq!(
             argv_strings(builder.get_argv()),
-            [r"C:\Windows\System32\cmd.exe", "/d", "/c"]
+            [
+                command_processor.to_string_lossy().into_owned(),
+                "/d".to_string(),
+                "/c".to_string()
+            ]
+        );
+        assert_eq!(
+            builder.get_env("ComSpec"),
+            Some(command_processor.as_os_str())
         );
     }
 
     #[test]
     fn detached_custom_command_uses_cmd() {
-        let expected_shell = std::env::var_os("ComSpec")
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| r"C:\Windows\System32\cmd.exe".into())
-            .to_string_lossy()
-            .into_owned();
+        let command_processor = super::system_command_processor();
 
         let process = super::detached_custom_command_process_platform("echo hello");
 
-        assert_eq!(process.get_program().to_string_lossy(), expected_shell);
+        assert_eq!(process.get_program(), command_processor.as_os_str());
         assert_eq!(
             process
                 .get_args()
@@ -2438,17 +2454,26 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["/d", "/c", "echo hello"]
         );
+        assert_eq!(
+            process
+                .get_envs()
+                .find(|(key, _)| key.to_string_lossy().eq_ignore_ascii_case("ComSpec"))
+                .and_then(|(_, value)| value),
+            Some(command_processor.as_os_str())
+        );
     }
 
     #[test]
-    fn custom_command_falls_back_when_comspec_is_empty() {
-        let builder =
-            super::pane_custom_command_pty_builder_with_comspec("echo hello", Some("".into()));
+    fn system_command_processor_is_a_real_cmd_executable() {
+        let command_processor = super::system_command_processor();
 
         assert_eq!(
-            argv_strings(builder.get_argv()),
-            [r"C:\Windows\System32\cmd.exe", "/d", "/c"]
+            std::path::Path::new(&command_processor)
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str),
+            Some("cmd.exe")
         );
+        assert!(std::path::Path::new(&command_processor).is_file());
     }
 
     #[test]
@@ -2475,9 +2500,7 @@ mod tests {
         let cwd = std::env::temp_dir().join(format!("herdr-cwd-test-{}", std::process::id()));
         fs::create_dir_all(&cwd).expect("create cwd fixture");
 
-        let shell =
-            std::env::var_os("ComSpec").unwrap_or_else(|| r"C:\Windows\System32\cmd.exe".into());
-        let mut child = Command::new(shell)
+        let mut child = Command::new(super::system_command_processor())
             .args(["/D", "/Q", "/C", "ping -n 11 127.0.0.1 > NUL"])
             .current_dir(&cwd)
             .stdin(Stdio::null())
@@ -2505,9 +2528,7 @@ mod tests {
 
     #[test]
     fn windows_process_environment_reads_runtime_marker() {
-        let shell =
-            std::env::var_os("ComSpec").unwrap_or_else(|| r"C:\Windows\System32\cmd.exe".into());
-        let mut child = Command::new(shell)
+        let mut child = Command::new(super::system_command_processor())
             .args(["/D", "/Q", "/C", "ping -n 11 127.0.0.1 > NUL"])
             .env(super::PANE_RUNTIME_MARKER_ENV_VAR, "pane-test")
             .stdin(Stdio::null())

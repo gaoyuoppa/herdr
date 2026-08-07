@@ -52,6 +52,7 @@ upstream merge needs semantic conflict resolution.
 | Maintenance tests on Windows | Read repository text as UTF-8, compare tracked paths in POSIX form, and keep `*.patch` files LF-only. Run the same Python maintenance suite in both native gates. |
 | Shared UI and layout tests | Fix the split ratio and assert the intended viewport height before testing truncation. A localized label must not undo an upstream narrow-screen fallback; measure terminal cell width, not UTF-8 bytes. Keep the shared UI suite in the native Windows gate instead of relying on Unix-only full tests. |
 | Packaged PowerShell defaults | Windows PowerShell 5.1 can evaluate `$PSScriptRoot` as empty inside a `param(...)` default expression. Resolve package-relative executable and icon paths in the script body, and test the packaged installer without explicit path overrides. |
+| Windows command processor | Terminal launchers can repurpose inherited `ComSpec` to point at themselves. Resolve `cmd.exe` from the Windows system directory and normalize `ComSpec` for pane, plugin, custom-command, and batch-file descendants; never treat arbitrary `ComSpec` as an executable path. |
 
 The 2026-08-07 rehearsal against upstream `69a07fdf` had one semantic conflict,
 in `docs/next/website/src/content/docs/keyboard.mdx`: keep upstream's big-word
