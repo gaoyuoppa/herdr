@@ -136,6 +136,8 @@ try {
 
     $required = @(
         "herdr.exe",
+        "assets\herdr.png",
+        "install-terminal-profile.ps1",
         "conpty\herdr-conpty.json",
         "conpty\conpty.dll",
         "conpty\x64\OpenConsole.exe",

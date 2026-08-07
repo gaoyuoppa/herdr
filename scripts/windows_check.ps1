@@ -126,6 +126,13 @@ Invoke-Checked python @(
     "scripts.test_cross_platform_gate",
     "scripts.test_sync_upstream"
 )
+Invoke-Checked powershell.exe @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    (Join-Path $PSScriptRoot "windows_terminal_profile_test.ps1")
+)
 Invoke-CargoTestFilter "windows_"
 Invoke-CargoTestFilter "server::client_transport::tests"
 Invoke-CargoTestFilter "app::tests::native_repeats_and_releases_follow_the_pressed_pane" -Exact
