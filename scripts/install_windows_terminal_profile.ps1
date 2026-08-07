@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$HerdrExe = (Join-Path $PSScriptRoot "herdr.exe"),
-    [string]$IconPath = (Join-Path $PSScriptRoot "assets\herdr.png"),
+    [string]$HerdrExe,
+    [string]$IconPath,
     [string]$StartingDirectory = [Environment]::GetFolderPath("UserProfile"),
     [string]$SettingsPath,
     [string]$ProfileName = "Herdr",
@@ -13,6 +13,19 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$scriptDirectory = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($scriptDirectory)) {
+    $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+if ([string]::IsNullOrWhiteSpace($scriptDirectory)) {
+    throw "Could not determine the terminal profile installer directory"
+}
+if ([string]::IsNullOrWhiteSpace($HerdrExe)) {
+    $HerdrExe = Join-Path $scriptDirectory "herdr.exe"
+}
+if ([string]::IsNullOrWhiteSpace($IconPath)) {
+    $IconPath = Join-Path $scriptDirectory "assets\herdr.png"
+}
 if ($Elevate -and $NoElevate) {
     throw "-Elevate and -NoElevate cannot be used together"
 }

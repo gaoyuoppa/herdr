@@ -151,6 +151,34 @@ try {
         }
     }
 
+    $terminalSettingsPath = Join-Path $root "terminal-settings.json"
+    @'
+{
+  "profiles": {
+    "defaults": {},
+    "list": []
+  }
+}
+'@ | Set-Content -LiteralPath $terminalSettingsPath -Encoding UTF8
+    & (Join-Path $installDir "install-terminal-profile.ps1") `
+        -StartingDirectory $root `
+        -SettingsPath $terminalSettingsPath `
+        -Elevate `
+        -SetDefault | Out-Null
+    $terminalSettings = Get-Content -LiteralPath $terminalSettingsPath -Raw | ConvertFrom-Json
+    $terminalProfile = @($terminalSettings.profiles.list | Where-Object { $_.name -eq "Herdr" })
+    if ($terminalProfile.Count -ne 1) {
+        throw "packaged terminal profile installer did not create exactly one Herdr profile"
+    }
+    $expectedTerminalCommand = '"' + (Resolve-Path -LiteralPath (Join-Path $installDir "herdr.exe")).Path + '"'
+    if ($terminalProfile[0].commandline -cne $expectedTerminalCommand) {
+        throw "packaged terminal profile installer resolved an unexpected Herdr path"
+    }
+    $expectedTerminalIcon = (Resolve-Path -LiteralPath (Join-Path $installDir "assets\herdr.png")).Path
+    if ($terminalProfile[0].icon -cne $expectedTerminalIcon) {
+        throw "packaged terminal profile installer resolved an unexpected icon path"
+    }
+
     $releaseDir = Get-ChildItem -LiteralPath (Join-Path $herdrHome "packages\standalone\releases") -Directory |
         Where-Object { -not $_.Name.StartsWith(".staging.") } |
         Select-Object -First 1
