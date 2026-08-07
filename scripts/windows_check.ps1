@@ -126,6 +126,7 @@ if ($Mode -eq "lint") {
 Invoke-Checked python @(
     "-m",
     "unittest",
+    "scripts.test_i18n_key_check",
     "scripts.test_cross_platform_gate",
     "scripts.test_sync_upstream"
 )

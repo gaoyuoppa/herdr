@@ -3,7 +3,7 @@
 # Run tests
 test:
     cargo nextest run --locked --status-level fail --final-status-level fail --failure-output final --success-output never
-    python3 -m unittest scripts.test_agent_detection_manifest_check scripts.test_changelog scripts.test_config_reference_check scripts.test_cross_platform_gate scripts.test_docs_translation_parity scripts.test_herdr_automation_issue scripts.test_herdr_deploy scripts.test_herdr_deploy_integration scripts.test_sync_upstream scripts.test_hermes_integration_asset scripts.test_package_windows_conpty scripts.test_preview scripts.test_vendor_libghostty_vt scripts.test_vendor_portable_pty
+    python3 -m unittest scripts.test_agent_detection_manifest_check scripts.test_changelog scripts.test_config_reference_check scripts.test_cross_platform_gate scripts.test_docs_translation_parity scripts.test_i18n_key_check scripts.test_herdr_automation_issue scripts.test_herdr_deploy scripts.test_herdr_deploy_integration scripts.test_sync_upstream scripts.test_hermes_integration_asset scripts.test_package_windows_conpty scripts.test_preview scripts.test_vendor_libghostty_vt scripts.test_vendor_portable_pty
     just integration-assets-test
     just plugin-marketplace-test
 
@@ -26,7 +26,7 @@ lint:
 [unix]
 ci filter='all()': lint
     cargo nextest run --locked -E "{{filter}}" --status-level fail --final-status-level slow --failure-output final --success-output never
-    python3 -m unittest scripts.test_cross_platform_gate
+    python3 -m unittest scripts.test_cross_platform_gate scripts.test_i18n_key_check
     just integration-assets-test
     just plugin-marketplace-test
 
@@ -39,7 +39,7 @@ windows-lint:
 # Check formatting + run unit tests + Windows target lint + maintenance script tests
 [unix]
 check: ci windows-lint
-    python3 -m unittest scripts.test_agent_detection_manifest_check scripts.test_changelog scripts.test_config_reference_check scripts.test_cross_platform_gate scripts.test_docs_translation_parity scripts.test_herdr_automation_issue scripts.test_herdr_deploy scripts.test_herdr_deploy_integration scripts.test_sync_upstream scripts.test_hermes_integration_asset scripts.test_package_windows_conpty scripts.test_preview scripts.test_vendor_libghostty_vt scripts.test_vendor_portable_pty
+    python3 -m unittest scripts.test_agent_detection_manifest_check scripts.test_changelog scripts.test_config_reference_check scripts.test_cross_platform_gate scripts.test_docs_translation_parity scripts.test_i18n_key_check scripts.test_herdr_automation_issue scripts.test_herdr_deploy scripts.test_herdr_deploy_integration scripts.test_sync_upstream scripts.test_hermes_integration_asset scripts.test_package_windows_conpty scripts.test_preview scripts.test_vendor_libghostty_vt scripts.test_vendor_portable_pty
     @echo "docs reminder: if this changes user-facing behavior, make sure the relevant release docs are updated or called out before release."
 
 [script("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File")]

@@ -1046,7 +1046,7 @@ fn agent_summary_segments(
                 true,
                 Some("◉"),
                 counts.blocked,
-                &t!("common.blocked"),
+                &t!("status.blocked"),
             ),
             SummaryTone::Blocked,
         ));
@@ -1059,7 +1059,7 @@ fn agent_summary_segments(
                 false,
                 Some("●"),
                 counts.done,
-                &t!("common.done"),
+                &t!("status.done"),
             ),
             SummaryTone::Done,
         ));
@@ -1072,7 +1072,7 @@ fn agent_summary_segments(
                 true,
                 None,
                 counts.working,
-                &t!("common.working"),
+                &t!("status.working"),
             ),
             SummaryTone::Working,
         ));
@@ -1085,7 +1085,7 @@ fn agent_summary_segments(
                 true,
                 None,
                 counts.idle,
-                &t!("common.idle"),
+                &t!("status.idle"),
             ),
             SummaryTone::Idle,
         ));

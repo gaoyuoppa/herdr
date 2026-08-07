@@ -48,6 +48,7 @@ upstream merge needs semantic conflict resolution.
 | Windows Terminal windows | Restore only the window that owns the current client process. Never enumerate and reposition unrelated Terminal windows. |
 | Copy-mode documentation | Upstream may extend copy navigation while the fork changes mouse-copy defaults. Preserve both sets of semantics in English, Japanese, and Chinese docs. |
 | Linux-only Clippy lints | A Windows cross-target `cargo check` can miss warnings in `cfg(unix)` code. Keep the Windows-to-Linux musl gate on Clippy with warnings denied. |
+| Translation key namespaces | Missing rust-i18n keys compile and render as their dotted key names. Keep `scripts.test_i18n_key_check` in both native gates so every literal `t!` key exists in both `en.yml` and `zh.yml`. |
 
 The 2026-08-07 rehearsal against upstream `69a07fdf` had one semantic conflict,
 in `docs/next/website/src/content/docs/keyboard.mdx`: keep upstream's big-word

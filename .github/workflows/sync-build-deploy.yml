@@ -333,6 +333,7 @@ jobs:
             scripts.test_config_reference_check \
             scripts.test_cross_platform_gate \
             scripts.test_docs_translation_parity \
+            scripts.test_i18n_key_check \
             scripts.test_herdr_automation_issue \
             scripts.test_herdr_deploy \
             scripts.test_herdr_deploy_integration \

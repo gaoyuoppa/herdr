@@ -300,6 +300,7 @@ nav:
 
 # dialog 对话框 (dialogs.rs)
 dialog:
+  new_workspace: "新建工作区"
   rename_workspace: "重命名工作区"
   new_tab: "新标签页"
   rename_tab: "重命名标签页"
