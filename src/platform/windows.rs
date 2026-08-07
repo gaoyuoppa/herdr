@@ -89,12 +89,32 @@ const PROCESS_ENVIRONMENT_READ_CHUNK_BYTES: usize = 16 * 1024;
 const PROCESS_RUNTIME_MARKER_CACHE_CAPACITY: usize = 1_024;
 const PROCESS_RUNTIME_MARKER_CACHE_RETENTION: Duration = Duration::from_secs(60);
 const PROCESS_RUNTIME_MARKER_NEGATIVE_TTL: Duration = Duration::from_secs(1);
+const DEFAULT_PANE_SHELL_CANDIDATES: [&str; 3] = ["pwsh.exe", "powershell.exe", "cmd.exe"];
 
 static NEXT_PANE_RUNTIME_MARKER: AtomicU64 = AtomicU64::new(1);
 static PROCESS_RUNTIME_MARKER_CACHE: LazyLock<Mutex<HashMap<u32, CachedProcessRuntimeMarker>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static GIT_BASH_PROCESS_CACHE: LazyLock<Mutex<HashMap<u32, CachedGitBashProcess>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub(crate) fn default_windows_pane_shell() -> String {
+    select_default_windows_pane_shell(windows_executable_available)
+}
+
+fn select_default_windows_pane_shell(mut available: impl FnMut(&str) -> bool) -> String {
+    DEFAULT_PANE_SHELL_CANDIDATES
+        .iter()
+        .copied()
+        .find(|candidate| available(candidate))
+        .unwrap_or("cmd.exe")
+        .to_string()
+}
+
+fn windows_executable_available(executable: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path).any(|directory| directory.join(executable).is_file())
+    })
+}
 
 pub(crate) fn remote_ssh_config_paths() -> super::RemoteSshConfigPaths {
     super::RemoteSshConfigPaths {
@@ -1977,6 +1997,30 @@ mod tests {
     use windows_sys::Win32::System::Console::{
         AllocConsole, FreeConsole, GetConsoleProcessList, GetConsoleWindow,
     };
+
+    #[test]
+    fn default_windows_pane_shell_prefers_pwsh() {
+        assert_eq!(
+            super::select_default_windows_pane_shell(|_| true),
+            "pwsh.exe"
+        );
+    }
+
+    #[test]
+    fn default_windows_pane_shell_falls_back_to_windows_powershell() {
+        assert_eq!(
+            super::select_default_windows_pane_shell(|candidate| candidate == "powershell.exe"),
+            "powershell.exe"
+        );
+    }
+
+    #[test]
+    fn default_windows_pane_shell_falls_back_to_cmd() {
+        assert_eq!(
+            super::select_default_windows_pane_shell(|_| false),
+            "cmd.exe"
+        );
+    }
 
     #[test]
     fn private_remote_directory_supports_long_paths() {

@@ -1331,7 +1331,7 @@ fn pane_shell_from(configured_shell: &str, env_shell: Option<String>) -> String 
 
 #[cfg(windows)]
 fn default_pane_shell() -> String {
-    "powershell.exe".into()
+    crate::platform::default_windows_pane_shell()
 }
 
 #[cfg(not(windows))]
