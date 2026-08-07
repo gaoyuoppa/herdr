@@ -152,5 +152,5 @@ Invoke-Checked powershell.exe @(
 Invoke-CargoTestFilter "windows_"
 Invoke-CargoTestFilter "server::client_transport::tests"
 Invoke-CargoTestFilter "app::tests::native_repeats_and_releases_follow_the_pressed_pane" -Exact
-Invoke-CargoTestFilter "ui::sidebar::tests::"
+Invoke-CargoTestFilter "ui::"
 Invoke-Checked cargo @("build", "--locked", "--target", "x86_64-pc-windows-msvc")

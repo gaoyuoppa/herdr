@@ -180,8 +180,14 @@ pub(super) fn render_config_diagnostic(frame: &mut Frame, area: Rect, message: &
         .take(area.height as usize)
         .enumerate()
     {
-        let text = t!("statusbar.config_warning", message = line).to_string();
-        let width = (text.len() as u16).min(area.width);
+        let labeled = t!("statusbar.config_warning", message = line).to_string();
+        let compact = format!(" {line} ");
+        let text = if display_width_u16(&labeled) <= area.width {
+            labeled
+        } else {
+            compact
+        };
+        let width = display_width_u16(&text).min(area.width);
         let notif_area = Rect::new(
             area.x + area.width.saturating_sub(width),
             area.y + row as u16,
