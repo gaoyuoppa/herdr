@@ -36,11 +36,13 @@ class CrossPlatformGateTests(unittest.TestCase):
         self.assertIn("os: windows-latest", workflow)
         self.assertIn(".\\scripts\\windows_check.ps1 -Mode check", workflow)
 
-    def test_windows_local_check_compiles_the_linux_release_target(self) -> None:
+    def test_windows_local_check_lints_the_linux_release_target(self) -> None:
         script = WINDOWS_CHECK.read_text(encoding="utf-8")
 
         self.assertGreaterEqual(script.count("x86_64-unknown-linux-musl"), 2)
-        self.assertIn('"check",', script)
+        linux_gate = script.split("$previousLibghosttyVtSimd", maxsplit=1)[1]
+        self.assertIn('"clippy",', linux_gate)
+        self.assertIn('"-D",\n        "warnings"', linux_gate)
         self.assertIn("cfg(unix)", script)
 
     def test_promotion_waits_for_linux_and_windows_candidate_gates(self) -> None:

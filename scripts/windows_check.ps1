@@ -96,17 +96,20 @@ Invoke-CargoWithZigCacheRecovery @(
 
 $previousLibghosttyVtSimd = $env:LIBGHOSTTY_VT_SIMD
 try {
-    # A Windows host cannot run Linux tests, but compiling the Linux release
-    # target catches cfg(unix), shared-interface, and target dependency drift
-    # before the native Ubuntu gate runs.
+    # A Windows host cannot run Linux tests, but linting the Linux release
+    # target catches cfg(unix), Linux-only warning, shared-interface, and
+    # target dependency drift before the native Ubuntu gate runs.
     $env:LIBGHOSTTY_VT_SIMD = "false"
     Invoke-CargoWithZigCacheRecovery @(
-        "check",
+        "clippy",
         "--bin",
         "herdr",
         "--locked",
         "--target",
-        "x86_64-unknown-linux-musl"
+        "x86_64-unknown-linux-musl",
+        "--",
+        "-D",
+        "warnings"
     )
 } finally {
     if ($null -eq $previousLibghosttyVtSimd) {

@@ -47,6 +47,7 @@ upstream merge needs semantic conflict resolution.
 | Windows named pipes | Elevated and non-elevated clients of the same user must interoperate without granting access to other users. Keep the SID-based Windows-only security test. |
 | Windows Terminal windows | Restore only the window that owns the current client process. Never enumerate and reposition unrelated Terminal windows. |
 | Copy-mode documentation | Upstream may extend copy navigation while the fork changes mouse-copy defaults. Preserve both sets of semantics in English, Japanese, and Chinese docs. |
+| Linux-only Clippy lints | A Windows cross-target `cargo check` can miss warnings in `cfg(unix)` code. Keep the Windows-to-Linux musl gate on Clippy with warnings denied. |
 
 The 2026-08-07 rehearsal against upstream `69a07fdf` had one semantic conflict,
 in `docs/next/website/src/content/docs/keyboard.mdx`: keep upstream's big-word
@@ -76,10 +77,11 @@ commits, pushes, or deploys. The legacy `scripts/update-from-upstream.sh` and
 `scripts/auto-update.py` names are thin compatibility entry points for the same
 sync-only flow.
 
-The checks also compile in the opposite direction where practical: Unix
-`just check` runs Windows-target Clippy, while Windows `just check` compiles the
-Linux musl target. These checks catch conditional-compilation drift early, but
-they do not replace the native runtime jobs.
+The checks also lint in the opposite direction where practical: Unix
+`just check` runs Windows-target Clippy, while Windows `just check` runs Clippy
+for the Linux musl target. These checks catch conditional-compilation and
+platform-only warning drift early, but they do not replace the native runtime
+jobs.
 
 ## Repository configuration
 

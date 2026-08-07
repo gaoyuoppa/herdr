@@ -656,13 +656,11 @@ impl PtyIoActorRunner {
             if readiness.wake_ready {
                 fd::drain_wake_fd(self.wake_read_fd.as_raw_fd())?;
             }
-            if readiness.pty_read_ready {
-                if self.read_once() == ReadOutcome::Closed {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
-                        "PTY closed while draining writes before handoff",
-                    ));
-                }
+            if readiness.pty_read_ready && self.read_once() == ReadOutcome::Closed {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "PTY closed while draining writes before handoff",
+                ));
             }
             if readiness.pty_write_ready {
                 self.flush_pending_writes_once();
