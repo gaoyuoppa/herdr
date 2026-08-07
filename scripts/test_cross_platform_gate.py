@@ -50,6 +50,12 @@ class CrossPlatformGateTests(unittest.TestCase):
 
         self.assertIn('"scripts.test_i18n_key_check"', script)
 
+    def test_windows_local_check_runs_portable_vendor_patch_checks(self) -> None:
+        script = WINDOWS_CHECK.read_text(encoding="utf-8")
+
+        self.assertIn('"scripts.test_vendor_libghostty_vt"', script)
+        self.assertIn('"scripts.test_vendor_portable_pty"', script)
+
     def test_promotion_waits_for_linux_and_windows_candidate_gates(self) -> None:
         workflow = SYNC_WORKFLOW.read_text(encoding="utf-8")
         linux = job_body(workflow, "prepare-linux-candidate")

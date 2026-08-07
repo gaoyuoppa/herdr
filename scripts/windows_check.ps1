@@ -126,9 +126,21 @@ if ($Mode -eq "lint") {
 Invoke-Checked python @(
     "-m",
     "unittest",
-    "scripts.test_i18n_key_check",
+    "scripts.test_agent_detection_manifest_check",
+    "scripts.test_changelog",
+    "scripts.test_config_reference_check",
     "scripts.test_cross_platform_gate",
-    "scripts.test_sync_upstream"
+    "scripts.test_docs_translation_parity",
+    "scripts.test_i18n_key_check",
+    "scripts.test_herdr_automation_issue",
+    "scripts.test_herdr_deploy",
+    "scripts.test_herdr_deploy_integration",
+    "scripts.test_sync_upstream",
+    "scripts.test_hermes_integration_asset",
+    "scripts.test_package_windows_conpty",
+    "scripts.test_preview",
+    "scripts.test_vendor_libghostty_vt",
+    "scripts.test_vendor_portable_pty"
 )
 Invoke-Checked powershell.exe @(
     "-NoProfile",
