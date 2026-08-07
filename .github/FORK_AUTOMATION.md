@@ -47,7 +47,7 @@ upstream merge needs semantic conflict resolution.
 | Windows named pipes | Elevated and non-elevated clients of the same user must interoperate without granting access to other users. Keep the SID-based Windows-only security test. |
 | Windows Terminal windows | Restore only the window that owns the current client process. Never enumerate and reposition unrelated Terminal windows. |
 | Copy-mode documentation | Upstream may extend copy navigation while the fork changes mouse-copy defaults. Preserve both sets of semantics in English, Japanese, and Chinese docs. |
-| Linux-only Clippy lints | A Windows cross-target `cargo check` can miss warnings in `cfg(unix)` code. Keep the Windows-to-Linux musl gate on Clippy with warnings denied. |
+| Linux-only Clippy lints | A Windows cross-target `cargo check` can miss warnings in `cfg(unix)` code. Keep the Windows-to-Linux musl gate on Clippy with warnings denied, and keep Zig caches on the checkout drive for every target when the build host is Windows. |
 | Translation key namespaces | Missing rust-i18n keys compile and render as their dotted key names. Keep `scripts.test_i18n_key_check` in both native gates so every literal `t!` key exists in both `en.yml` and `zh.yml`. |
 | Maintenance tests on Windows | Read repository text as UTF-8, compare tracked paths in POSIX form, and keep `*.patch` files LF-only. Run the same Python maintenance suite in both native gates. |
 | Shared UI and layout tests | Fix the split ratio and assert the intended viewport height before testing truncation. A localized label must not undo an upstream narrow-screen fallback; measure terminal cell width, not UTF-8 bytes. Keep the shared UI suite in the native Windows gate instead of relying on Unix-only full tests. |
