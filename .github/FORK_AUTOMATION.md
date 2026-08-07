@@ -2,17 +2,84 @@
 
 The fork's default branch is `deploy/zh-with-perf`. The `master` branch is a
 fast-forward-only mirror of `herdrdev/herdr:master`; custom changes never land
-on it. The hourly workflow creates a temporary merge candidate and does not
-advance the custom branch until all checks and the Linux build pass.
-After the verified Linux commit is advanced and deployed, a native
-Windows Server 2022 job checks out that exact commit and builds the localized
-Windows x86_64 ConPTY package. The combined workflow is not considered
-recovered until that Windows job also succeeds.
+on it. The hourly workflow creates a temporary merge candidate. Linux and
+native Windows Server 2022 jobs validate that same commit, and the custom
+branch is not advanced or deployed until both platforms pass. A candidate is
+transferred between jobs as a Git bundle; it is never exposed as a partially
+verified remote branch.
 
 The workflow never opens an upstream issue or pull request. Failures are kept
 in the fork's single issue named
 `[automation] Upstream sync/build/deploy failed`. Repeated identical failures
 update that issue in place, and a successful recovery comments and closes it.
+
+## Local patch boundaries
+
+Keep fork work as a reviewable patch stack on `deploy/zh-with-perf`. Do not mix
+an upstream merge with new fork behavior, and do not squash unrelated lanes
+together. The stable lanes and required validation are:
+
+| Lane | Typical scope | Required validation |
+| --- | --- | --- |
+| Shared behavior | `src/app/`, `src/config/`, `src/client/`, `src/server/`, shared docs | Native Linux and native Windows checks; prefer one platform-neutral regression test |
+| Windows runtime | `src/platform/windows/`, Windows-only IPC and ConPTY adapters | Shared tests plus native Windows tests |
+| Linux runtime/deployment | Unix adapters, musl packaging, `scripts/herdr_deploy.py` | Shared tests plus native Linux tests and static artifact checks |
+| Platform packaging | Windows profile/installer or Linux artifact scripts | The matching native package test; shared metadata formats must be tested on both |
+| Localization | `locales/`, localized docs, translation infrastructure | Translation parity plus both native builds |
+| Independent features | Pane, performance, detection, and integrations | Keep one functional concern per commit and apply the shared/platform rule above |
+
+Shared policy belongs in platform-neutral modules. Platform modules should
+contain only host API calls and adaptations. When a bug is first observed on
+one operating system, check the shared path before adding an OS-specific
+workaround. Add a shared regression test when the behavior should match; when
+the host APIs genuinely differ, add paired Linux/Windows tests that describe
+the same scenario and document the intentional difference.
+
+### Shared pitfall ledger
+
+Keep this table current when a platform fix exposes a shared assumption or an
+upstream merge needs semantic conflict resolution.
+
+| Area | Pitfall to preserve |
+| --- | --- |
+| Mouse selection/settings | Defaults and modal routing are shared behavior. Fix and test them outside `cfg(windows)` even when first reproduced in Windows Terminal. |
+| `src/app/runtime.rs`, `src/client/mod.rs` | These are shared hot spots for both terminal appearance/input work and Windows client lifecycle work. An automatic merge is not enough; run both native gates. |
+| Windows named pipes | Elevated and non-elevated clients of the same user must interoperate without granting access to other users. Keep the SID-based Windows-only security test. |
+| Windows Terminal windows | Restore only the window that owns the current client process. Never enumerate and reposition unrelated Terminal windows. |
+| Copy-mode documentation | Upstream may extend copy navigation while the fork changes mouse-copy defaults. Preserve both sets of semantics in English, Japanese, and Chinese docs. |
+
+The 2026-08-07 rehearsal against upstream `69a07fdf` had one semantic conflict,
+in `docs/next/website/src/content/docs/keyboard.mdx`: keep upstream's big-word
+`W/B/E` navigation and the fork's manual drag-selection behavior. All Rust
+source changes merged automatically, but the resulting candidate was still
+run through the full Windows check rather than being accepted on merge status
+alone.
+
+Generated packages belong under the ignored `/release/` directory. They are
+validation outputs, never source inputs and never part of an upstream merge.
+
+For a local synchronization, first commit each pending lane and leave the
+working tree clean, then run:
+
+```bash
+python scripts/sync_upstream.py
+```
+
+The tool pins `upstream` to `herdrdev/herdr`, disables pushes to that remote,
+creates a timestamped backup branch, performs a non-rebasing `--no-commit`
+merge, runs `git diff --check` and the current host's `just check`, and only
+then creates the standard upstream merge commit. A local check proves only the
+host on which it ran; the `deploy/zh-with-perf` CI and automated promotion gate
+remain responsible for native Linux plus native Windows acceptance. A conflict
+or failed check aborts the merge; the tool never stashes, rewrites fork
+commits, pushes, or deploys. The legacy `scripts/update-from-upstream.sh` and
+`scripts/auto-update.py` names are thin compatibility entry points for the same
+sync-only flow.
+
+The checks also compile in the opposite direction where practical: Unix
+`just check` runs Windows-target Clippy, while Windows `just check` compiles the
+Linux musl target. These checks catch conditional-compilation drift early, but
+they do not replace the native runtime jobs.
 
 ## Repository configuration
 
@@ -41,10 +108,11 @@ failure notifications in GitHub's notification settings.
 ## Deployment invariants
 
 The workflow builds `x86_64-unknown-linux-musl` and
-`x86_64-pc-windows-msvc`. Both use Rust 1.96.1, Zig 0.15.2, `ReleaseFast`, and
-SIMD. The Linux deployment gate verifies static linking, unresolved C++
-runtime symbols, binary version, protocol, and SHA-256 before uploading
-anything to the server.
+`x86_64-pc-windows-msvc` from the same candidate SHA. Both use Rust 1.96.1,
+Zig 0.15.2, `ReleaseFast`, and SIMD. The Linux gate verifies static linking,
+unresolved C++ runtime symbols, binary version, protocol, and SHA-256. The
+custom branch and Linux server remain unchanged until this gate and the native
+Windows gate both succeed.
 
 The Windows job runs the repository's native Windows checks, creates a Release
 binary, and verifies that `ui.language = "zh"` produces Simplified Chinese CLI
@@ -82,7 +150,7 @@ in a disposable fork/branch before relying on the hourly schedule:
 
 1. clean upstream merge and deployment;
 2. deliberate merge conflict (custom branch and server stay unchanged);
-3. failing test/build (no deployment);
+3. failing Linux or Windows test/build (no branch advancement or deployment);
 4. unavailable SSH or rejected handoff (old service remains usable);
 5. a Windows package build with Chinese `--help`, signed ConPTY files, and a
    passing installer/repair test;

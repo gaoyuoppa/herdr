@@ -80,6 +80,7 @@ function Invoke-CargoTestFilter {
 }
 
 Invoke-Checked rustup @("target", "add", "x86_64-pc-windows-msvc")
+Invoke-Checked rustup @("target", "add", "x86_64-unknown-linux-musl")
 Invoke-Checked cargo @("fmt", "--check")
 Invoke-CargoWithZigCacheRecovery @(
     "clippy",
@@ -93,10 +94,38 @@ Invoke-CargoWithZigCacheRecovery @(
     "warnings"
 )
 
+$previousLibghosttyVtSimd = $env:LIBGHOSTTY_VT_SIMD
+try {
+    # A Windows host cannot run Linux tests, but compiling the Linux release
+    # target catches cfg(unix), shared-interface, and target dependency drift
+    # before the native Ubuntu gate runs.
+    $env:LIBGHOSTTY_VT_SIMD = "false"
+    Invoke-CargoWithZigCacheRecovery @(
+        "check",
+        "--bin",
+        "herdr",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-musl"
+    )
+} finally {
+    if ($null -eq $previousLibghosttyVtSimd) {
+        Remove-Item Env:LIBGHOSTTY_VT_SIMD -ErrorAction SilentlyContinue
+    } else {
+        $env:LIBGHOSTTY_VT_SIMD = $previousLibghosttyVtSimd
+    }
+}
+
 if ($Mode -eq "lint") {
     return
 }
 
+Invoke-Checked python @(
+    "-m",
+    "unittest",
+    "scripts.test_cross_platform_gate",
+    "scripts.test_sync_upstream"
+)
 Invoke-CargoTestFilter "windows_"
 Invoke-CargoTestFilter "server::client_transport::tests"
 Invoke-CargoTestFilter "app::tests::native_repeats_and_releases_follow_the_pressed_pane" -Exact
