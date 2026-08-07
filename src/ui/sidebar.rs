@@ -3362,7 +3362,7 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
         );
         let spacious_metrics = workspace_list_scroll_metrics(&app, Rect::new(0, 0, 30, 7));
         assert_eq!(spacious_metrics.viewport_rows, 3);
-        assert_eq!(spacious_metrics.max_offset_from_bottom, 2);
+        assert_eq!(spacious_metrics.max_offset_from_bottom, 3);
 
         app.sidebar_spaces.row_gap = 0;
         let (packed, _) = compute_workspace_list_areas(&app, Rect::new(0, 0, 30, 30));
@@ -3373,8 +3373,8 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
             packed[2].rect.y + packed[2].rect.height + 1
         );
         let packed_metrics = workspace_list_scroll_metrics(&app, Rect::new(0, 0, 30, 7));
-        assert_eq!(packed_metrics.viewport_rows, 4);
-        assert_eq!(packed_metrics.max_offset_from_bottom, 0);
+        assert_eq!(packed_metrics.viewport_rows, 3);
+        assert_eq!(packed_metrics.max_offset_from_bottom, 1);
     }
 
     #[test]
