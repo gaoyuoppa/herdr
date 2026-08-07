@@ -1,4 +1,8 @@
 # CLI 命令帮助 (cli/spec.rs)
+startup:
+  windows_error_title: "Herdr startup failed"
+  windows_error_body: "Herdr could not start:\n\n%{error}\n\nLog: %{log_path}"
+
 cli:
   herdr_about: "terminal workspace manager for AI coding agents"
   root_usage_heading: "Usage"

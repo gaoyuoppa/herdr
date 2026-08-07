@@ -1211,6 +1211,9 @@ fn run_client_with_mode(
 ) -> io::Result<()> {
     init_logging();
 
+    #[cfg(windows)]
+    let _client_window_state_guard = crate::platform::restore_and_watch_client_window_state();
+
     let loaded_config = crate::config::Config::load();
     crate::terminal_modes::clear_host_mouse_reporting(&mut io::stdout())?;
     let mouse_capture = loaded_config.config.ui.mouse_capture;

@@ -12,7 +12,13 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod client_window;
 mod clipboard_image;
+
+pub(crate) use client_window::{
+    current_process_has_standalone_console, restore_and_watch_client_window_state,
+    show_startup_error_dialog,
+};
 
 use windows_sys::{
     Wdk::System::Threading::{NtQueryInformationProcess, ProcessBasicInformation},
@@ -492,6 +498,11 @@ fn launch_server_daemon_with_wmi(command: &std::process::Command) -> std::io::Re
             "working directory",
         )?,
         process_startup_information: Win32_ProcessStartup {
+            // Win32_ProcessStartup only accepts the creation flags documented
+            // by the CIM provider; CREATE_NO_WINDOW is rejected with error 21.
+            // This process is created by the WMI provider rather than by the
+            // Terminal-hosted client, so DETACHED_PROCESS does not trigger a
+            // second Windows Terminal window here.
             create_flags: DETACHED_PROCESS,
             environment_variables: effective_command_environment(command)?,
         },
@@ -613,7 +624,11 @@ fn current_job_kills_processes_on_close() -> std::io::Result<bool> {
 pub fn detach_server_daemon_command(command: &mut std::process::Command) {
     use std::os::windows::process::CommandExt;
 
-    command.creation_flags(DETACHED_PROCESS);
+    // Do not use `DETACHED_PROCESS` here. With Windows Terminal configured as
+    // the system's default terminal, it may create another Terminal window for
+    // the daemon. `CREATE_NO_WINDOW` provides the required console isolation
+    // without asking a terminal host to service the child process.
+    command.creation_flags(CREATE_NO_WINDOW);
 }
 
 pub fn current_process_is_detached_server_daemon() -> bool {

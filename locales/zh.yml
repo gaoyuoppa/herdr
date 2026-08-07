@@ -1,4 +1,8 @@
 # CLI 命令帮助
+startup:
+  windows_error_title: "Herdr 启动失败"
+  windows_error_body: "Herdr 无法启动：\n\n%{error}\n\n日志：%{log_path}"
+
 cli:
   herdr_about: "AI 编程智能体的终端工作区管理器"
   root_usage_heading: "用法"

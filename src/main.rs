@@ -447,11 +447,24 @@ pane_history = false
 const SKILL: &str = include_str!("../skills/herdr/SKILL.md");
 
 fn should_block_nested(config: &config::Config) -> bool {
-    should_block_nested_for_env(config, std::env::var(HERDR_ENV_VAR).ok().as_deref())
+    let herdr_env = std::env::var(HERDR_ENV_VAR).ok();
+    #[cfg(windows)]
+    let standalone_console = crate::platform::current_process_has_standalone_console();
+    #[cfg(not(windows))]
+    let standalone_console = false;
+    should_block_nested_for_launch(config, herdr_env.as_deref(), standalone_console)
 }
 
 fn should_block_nested_for_env(config: &config::Config, herdr_env: Option<&str>) -> bool {
     !config.experimental.allow_nested && herdr_env == Some(HERDR_ENV_VALUE)
+}
+
+fn should_block_nested_for_launch(
+    config: &config::Config,
+    herdr_env: Option<&str>,
+    standalone_console: bool,
+) -> bool {
+    should_block_nested_for_env(config, herdr_env) && !standalone_console
 }
 
 fn random_nested_message() -> &'static str {
@@ -514,6 +527,9 @@ fn main() -> io::Result<()> {
         }
     };
 
+    #[cfg(windows)]
+    let windows_default_launch = args.len() == 1 && remote_launch.is_none();
+
     if remote_launch.is_some()
         && args.get(1).is_some()
         && !args.iter().any(|a| {
@@ -533,6 +549,20 @@ fn main() -> io::Result<()> {
     {
         let early_config = config::Config::load();
         i18n::apply_locale(&early_config.config.ui.language);
+    }
+
+    #[cfg(windows)]
+    if windows_default_launch {
+        crate::logging::init_file_logging("herdr-client.log");
+        tracing::info!(
+            event = "windows.launch.start",
+            subsystem = "launcher",
+            outcome = "started",
+            pid = std::process::id(),
+            standalone_console = crate::platform::current_process_has_standalone_console(),
+            inherited_herdr_env = std::env::var_os(HERDR_ENV_VAR).is_some(),
+            "Windows default launch starting"
+        );
     }
 
     match cli::maybe_run(&args) {
@@ -781,6 +811,26 @@ fn main() -> io::Result<()> {
     if !no_session {
         if let Err(err) = server::autodetect::auto_detect_launch() {
             eprintln!("herdr: {err}");
+            #[cfg(windows)]
+            if windows_default_launch {
+                let log_path = crate::session::data_dir().join("herdr-client.log");
+                tracing::error!(
+                    event = "windows.launch.fail",
+                    subsystem = "launcher",
+                    outcome = "error",
+                    %err,
+                    path = %log_path.display(),
+                    "Windows default launch failed"
+                );
+                let title = t!("startup.windows_error_title").to_string();
+                let message = t!(
+                    "startup.windows_error_body",
+                    error = err.to_string(),
+                    log_path = log_path.display().to_string()
+                )
+                .to_string();
+                crate::platform::show_startup_error_dialog(&title, &message);
+            }
             std::process::exit(1);
         }
         return Ok(());
@@ -926,6 +976,26 @@ mod tests {
     fn nested_herdr_does_not_block_without_env() {
         let config = config::Config::default();
         assert!(!should_block_nested_for_env(&config, None));
+    }
+
+    #[test]
+    fn inherited_nested_env_does_not_block_a_standalone_console() {
+        let config = config::Config::default();
+        assert!(!should_block_nested_for_launch(
+            &config,
+            Some(HERDR_ENV_VALUE),
+            true
+        ));
+    }
+
+    #[test]
+    fn inherited_nested_env_still_blocks_a_shared_console() {
+        let config = config::Config::default();
+        assert!(should_block_nested_for_launch(
+            &config,
+            Some(HERDR_ENV_VALUE),
+            false
+        ));
     }
 
     #[test]
